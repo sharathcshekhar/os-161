@@ -1,6 +1,4 @@
 /*
- * CSE-521 Assignment 0 by Aditya Bhat and Sharath Chandrashekhara
- *
  * Copyright (c) 2000, 2001, 2002, 2003, 2004, 2005, 2008, 2009
  *	The President and Fellows of Harvard College.
  *
