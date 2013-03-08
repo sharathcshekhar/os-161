@@ -137,22 +137,86 @@ matchmaker(void *p, unsigned long which)
 // functions will allow you to do local initialization. They are called at
 // the top of the corresponding driver code.
 
+struct lock *intr_zero, *intr_one, *intr_two, *intr_three;
 void stoplight_init() {
-  return;
+  	
+	intr_zero = lock_create("zero");
+	KASSERT(intr_zero != NULL);	
+	
+	intr_one = lock_create("one");
+	KASSERT(intr_one != NULL);	
+	
+	intr_two = lock_create("two");
+	KASSERT(intr_two != NULL);	
+	
+	intr_three = lock_create("three");
+	KASSERT(intr_three != NULL);	
+	return;
 }
 
 // 20 Feb 2012 : GWA : Adding at the suggestion of Nikhil Londhe. We don't
 // care if your problems leak memory, but if you do, use this to clean up.
 
 void stoplight_cleanup() {
-  return;
+  	lock_destroy(intr_zero);
+  	lock_destroy(intr_one);
+  	lock_destroy(intr_two);
+  	lock_destroy(intr_three);
+	return;
 }
 
 void
 gostraight(void *p, unsigned long direction)
 {
 	struct semaphore * stoplightMenuSemaphore = (struct semaphore *)p;
-  (void)direction;
+ 	switch (direction) {
+		case 0:
+			lock_acquire(intr_zero);
+			lock_acquire(intr_three);
+			
+			inQuadrant(0);
+			inQuadrant(3);
+			lock_release(intr_zero);
+			
+			leaveIntersection();
+			lock_release(intr_three);
+			break;
+		case 1:
+			lock_acquire(intr_zero);
+			lock_acquire(intr_one);
+			
+			inQuadrant(1);
+			inQuadrant(0);
+			lock_release(intr_one);
+			
+			leaveIntersection();
+			lock_release(intr_zero);
+			break;
+		case 2:
+			lock_acquire(intr_one);
+			lock_acquire(intr_two);
+			
+			inQuadrant(2);
+			inQuadrant(1);
+			lock_release(intr_two);
+			
+			leaveIntersection();
+			lock_release(intr_one);
+			break;
+		case 3:
+			lock_acquire(intr_two);
+			lock_acquire(intr_three);
+			
+			inQuadrant(3);
+			inQuadrant(2);
+			lock_release(intr_three);
+			
+			leaveIntersection();
+			lock_release(intr_two);
+			break;
+		default:
+			KASSERT(false);
+	}
   
   // 08 Feb 2012 : GWA : Please do not change this code. This is so that your
   // stoplight driver can return to the menu cleanly.
@@ -164,8 +228,68 @@ void
 turnleft(void *p, unsigned long direction)
 {
 	struct semaphore * stoplightMenuSemaphore = (struct semaphore *)p;
-  (void)direction;
-  
+ 	switch (direction) {
+		case 0:
+			lock_acquire(intr_zero);
+			lock_acquire(intr_two);
+			lock_acquire(intr_three);
+			
+			inQuadrant(0);
+			inQuadrant(3);
+			lock_release(intr_zero);
+			inQuadrant(2);
+			lock_release(intr_three);
+			
+			leaveIntersection();
+			lock_release(intr_two);
+			break;
+		case 1:
+			lock_acquire(intr_zero);
+			lock_acquire(intr_one);
+			lock_acquire(intr_three);
+			
+			inQuadrant(1);
+			inQuadrant(0);
+			lock_release(intr_one);
+			inQuadrant(3);
+			lock_release(intr_zero);
+			
+			leaveIntersection();
+			lock_release(intr_three);
+			break;
+		case 2:
+			lock_acquire(intr_zero);
+			lock_acquire(intr_one);
+			lock_acquire(intr_two);
+			
+			inQuadrant(2);
+			inQuadrant(1);
+			lock_release(intr_two);
+			
+			inQuadrant(0);
+			lock_release(intr_one);
+			
+			leaveIntersection();
+			lock_release(intr_zero);
+			break;
+		case 3:
+			lock_acquire(intr_one);
+			lock_acquire(intr_two);
+			lock_acquire(intr_three);
+			
+			inQuadrant(3);
+			inQuadrant(2);
+			lock_release(intr_three);
+			
+			inQuadrant(1);
+			lock_release(intr_two);
+			
+			leaveIntersection();
+			lock_release(intr_one);
+			break;
+		default:
+			KASSERT(false);
+ 	} 
   // 08 Feb 2012 : GWA : Please do not change this code. This is so that your
   // stoplight driver can return to the menu cleanly.
   V(stoplightMenuSemaphore);
@@ -176,7 +300,34 @@ void
 turnright(void *p, unsigned long direction)
 {
 	struct semaphore * stoplightMenuSemaphore = (struct semaphore *)p;
-  (void)direction;
+ 	switch (direction) {
+		case 0:
+			lock_acquire(intr_zero);
+			inQuadrant(0);
+			leaveIntersection();
+			lock_release(intr_zero);
+			break;
+		case 1:
+			lock_acquire(intr_one);
+			inQuadrant(1);
+			leaveIntersection();
+			lock_release(intr_one);
+			break;
+		case 2:
+			lock_acquire(intr_two);
+			inQuadrant(2);
+			leaveIntersection();
+			lock_release(intr_two);
+			break;
+		case 3:
+			lock_acquire(intr_three);
+			inQuadrant(3);
+			leaveIntersection();
+			lock_release(intr_three);
+			break;
+		default:
+			KASSERT(false);
+	}
 
   // 08 Feb 2012 : GWA : Please do not change this code. This is so that your
   // stoplight driver can return to the menu cleanly.
