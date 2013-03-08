@@ -77,10 +77,10 @@ struct lock {
 	struct wchan *lk_wchan;
 	struct spinlock lk_lock;
 	/* 
-	 * lk_status is 1 if the lock is taken
-	 * 0 if the lock is free 
+	 * lk_holder will be NULL
+	 * if nobody is holding the lock
 	 */
-	volatile bool lk_status;
+	struct thread *lk_holder;
 };
 
 struct lock *lock_create(const char *name);
@@ -146,8 +146,21 @@ void cv_broadcast(struct cv *cv, struct lock *lock);
  * 13 Feb 2012 : GWA : Reader-writer locks.
  */
 
+/*
+ * 22 Feb: Sharath implementation
+ */
+
+#define RDWR_LOCK_SEM_INIT_VAL 1
+
 struct rwlock {
-        char *rwlock_name;
+	char *lk_name;
+	volatile rw_status_t lk_status;
+	struct lock *count_lock;
+	struct semaphore *lk_sem;
+   	struct {
+		int read;
+		int write;
+	} rdwr_count;
 };
 
 struct rwlock * rwlock_create(const char *);

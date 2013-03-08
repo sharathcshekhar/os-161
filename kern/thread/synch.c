@@ -170,7 +170,7 @@ lock_create(const char *name)
 	}
 	
 	spinlock_init(&lock->lk_lock);
-	lock->lk_status = false;
+	lock->lk_holder = NULL;
 	return lock;
 }
 
@@ -178,7 +178,8 @@ void
 lock_destroy(struct lock *lock)
 {
 	KASSERT(lock != NULL);
-
+	/* Assert that no one is holding the lock when destroying the lock */
+	KASSERT(lock->lk_holder == NULL);
 	spinlock_cleanup(&lock->lk_lock);
 	wchan_destroy(lock->lk_wchan);
 
@@ -190,18 +191,19 @@ void
 lock_acquire(struct lock *lock)
 {
 	KASSERT(curthread->t_in_interrupt == false);
+	KASSERT(lock_do_i_hold(lock) == false);
 
 	spinlock_acquire(&lock->lk_lock);
 	
-	while (lock->lk_status == true) {
+	while (lock->lk_holder != NULL) {
 		wchan_lock(lock->lk_wchan);
 		spinlock_release(&lock->lk_lock);
 		wchan_sleep(lock->lk_wchan);
 		spinlock_acquire(&lock->lk_lock);
 	}
 	
-	KASSERT(lock->lk_status == false);
-	lock->lk_status = true;
+	KASSERT(lock->lk_holder == NULL);
+	lock->lk_holder = curthread;
 	spinlock_release(&lock->lk_lock);
 }
 
@@ -209,11 +211,11 @@ void
 lock_release(struct lock *lock)
 {
 	KASSERT(lock != NULL);
-	
+	KASSERT(lock_do_i_hold(lock) == true);
 	spinlock_acquire(&lock->lk_lock);
 
-	lock->lk_status = false;
-	KASSERT(lock->lk_status == false);
+	lock->lk_holder = NULL;
+	KASSERT(lock->lk_holder == NULL);
 	wchan_wakeone(lock->lk_wchan);
 
 	spinlock_release(&lock->lk_lock);
@@ -222,11 +224,10 @@ lock_release(struct lock *lock)
 bool
 lock_do_i_hold(struct lock *lock)
 {
-        // Write this
-
-        (void)lock;  // suppress warning until code gets written
-
-        return true; // dummy until code gets written
+	if (lock->lk_holder == curthread) {
+        return true;
+	}
+	return false;
 }
 
 ////////////////////////////////////////////////////////////
@@ -288,4 +289,107 @@ cv_broadcast(struct cv *cv, struct lock *lock)
 	// Write this
 	(void)cv;    // suppress warning until code gets written
 	(void)lock;  // suppress warning until code gets written
+}
+
+/*
+ * Reader-Writer Locks
+ */
+
+struct rwlock * rwlock_create(const char *name)
+{
+	struct rwlock *rw_lock;
+
+	rw_lock = kmalloc(sizeof(struct rwlock));
+	if (rw_lock == NULL) {
+		return NULL;
+	}
+
+	rw_lock->lk_name = kstrdup(name);
+	if (rw_lock->lk_name == NULL) {
+		kfree(rw_lock);
+		return NULL;
+	}
+	
+	rw_lock->count_lock = lock_create("count_lock");
+	if (rw_lock->count_lock == NULL) {
+		kfree(rw_lock->lk_name);
+		kfree(rw_lock);
+		return NULL;
+	}
+	
+	rw_lock->lk_sem = sem_create("rw_sem", RDWR_LOCK_SEM_INIT_VAL);
+	if (rw_lock->lk_sem == NULL) {
+		lock_destroy(rw_lock->count_lock);
+		kfree(rw_lock->lk_name);
+		kfree(rw_lock);
+		return NULL;
+	}	
+
+	rw_lock->rdwr_count.read = 0;	
+	rw_lock->rdwr_count.write = 0;	
+	return rw_lock;
+
+}
+
+void rwlock_destroy(struct rwlock *rw_lock)
+{
+	KASSERT(rw_lock);
+	KASSERT((rw_lock->rdwr_count.read == 0) &&
+			(rw_lock->rdwr_count.write == 0));
+	/* Nobody should be holding the lock when destroying */	
+	sem_destroy(rw_lock->lk_sem);
+	lock_destroy(rw_lock->count_lock);
+	kfree(rw_lock->lk_name);
+	kfree(rw_lock);
+	return;
+}
+
+void rwlock_acquire_read(struct rwlock *rw_lock)
+{
+	if ((rw_lock->rdwr_count.write > 0) ||
+			(rw_lock->rdwr_count.read == 0)) {
+		/* 
+		 * Pick the semaphore if this is the first read
+		 * OR if someone is waiting for a write lock,
+		 * wait for them to release it
+		 */
+		P(rw_lock->lk_sem);
+	}
+	lock_acquire(rw_lock->count_lock);
+	rw_lock->rdwr_count.read++;
+	lock_release(rw_lock->count_lock);
+	return;
+}
+
+void rwlock_release_read(struct rwlock *rw_lock)
+{
+	lock_acquire(rw_lock->count_lock);
+	rw_lock->rdwr_count.read--;
+	lock_release(rw_lock->count_lock);
+	if (rw_lock->rdwr_count.read == 0) {
+		/*
+		 * release the semaphore if there are no more
+		 * reads, allowing a write lock 
+		 */
+		V(rw_lock->lk_sem);
+	}
+	return;
+}
+
+void rwlock_acquire_write(struct rwlock *rw_lock)
+{
+	lock_acquire(rw_lock->count_lock);
+	rw_lock->rdwr_count.write++;
+	lock_release(rw_lock->count_lock);
+	P(rw_lock->lk_sem);
+	return;
+}
+
+void rwlock_release_write(struct rwlock *rw_lock)
+{
+	V(rw_lock->lk_sem);
+	lock_acquire(rw_lock->count_lock);
+	rw_lock->rdwr_count.write--;
+	lock_release(rw_lock->count_lock);
+	return;
 }
