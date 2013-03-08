@@ -154,7 +154,6 @@ void cv_broadcast(struct cv *cv, struct lock *lock);
 
 struct rwlock {
 	char *lk_name;
-	volatile rw_status_t lk_status;
 	struct lock *count_lock;
 	struct semaphore *lk_sem;
    	struct {
