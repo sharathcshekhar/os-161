@@ -44,6 +44,15 @@ struct lock *sp_intr_one = NULL;
 struct lock *sp_intr_two = NULL;
 struct lock	*sp_intr_three = NULL;
 
+struct lock *male_lock = NULL;
+struct lock *female_lock = NULL;
+struct lock *match_maker_lock = NULL;
+struct lock *thread_count_lock = NULL;
+
+struct cv *thread_count_cv = NULL;
+
+int thread_count = 0;
+
 /*
  * 08 Feb 2012 : GWA : Driver code is in kern/synchprobs/driver.c. We will
  * replace that file. This file is yours to modify as you see fit.
@@ -56,13 +65,22 @@ struct lock	*sp_intr_three = NULL;
 // the top of the corresponding driver code.
 
 void whalemating_init() {
-  return;
+	male_lock = lock_create("male");
+	female_lock = lock_create("female");
+	match_maker_lock = lock_create("match_maker");
+	thread_count_lock = lock_create("counter");
+	thread_count_cv = cv_create("count_cv");
+	return;
 }
-
 // 20 Feb 2012 : GWA : Adding at the suggestion of Nikhil Londhe. We don't
 // care if your problems leak memory, but if you do, use this to clean up.
 
 void whalemating_cleanup() {
+	lock_destroy(male_lock);
+	lock_destroy(female_lock);
+	lock_destroy(match_maker_lock);
+	lock_destroy(thread_count_lock);
+	cv_destroy(thread_count_cv);
   return;
 }
 
@@ -70,48 +88,78 @@ void
 male(void *p, unsigned long which)
 {
 	struct semaphore * whalematingMenuSemaphore = (struct semaphore *)p;
-  (void)which;
+  	(void)which;
   
-  male_start();
-	// Implement this function 
-  male_end();
-
-  // 08 Feb 2012 : GWA : Please do not change this code. This is so that your
-  // whalemating driver can return to the menu cleanly.
-  V(whalematingMenuSemaphore);
-  return;
+  	male_start();
+	lock_acquire(male_lock);
+	lock_acquire(thread_count_lock);
+	thread_count++;
+	if (thread_count == 3) {
+		cv_broadcast(thread_count_cv, thread_count_lock);
+	} else {
+		cv_wait(thread_count_cv, thread_count_lock);
+	}
+	thread_count = 0;
+	lock_release(thread_count_lock);
+	lock_release(male_lock);		
+ 	male_end();
+	
+	// 08 Feb 2012 : GWA : Please do not change this code. This is so that your
+	// whalemating driver can return to the menu cleanly.
+ 	V(whalematingMenuSemaphore);
+  	return;
 }
 
 void
 female(void *p, unsigned long which)
 {
 	struct semaphore * whalematingMenuSemaphore = (struct semaphore *)p;
-  (void)which;
+  	(void)which;
   
-  female_start();
-	// Implement this function 
-  female_end();
+  	female_start();
+  	lock_acquire(female_lock);
+	lock_acquire(thread_count_lock);
+	thread_count++;
+	if (thread_count == 3) {
+		cv_broadcast(thread_count_cv, thread_count_lock);
+	} else {
+		cv_wait(thread_count_cv, thread_count_lock);
+	}
+	thread_count = 0;
+	lock_release(thread_count_lock);
+	lock_release(female_lock);
+  	female_end();
   
-  // 08 Feb 2012 : GWA : Please do not change this code. This is so that your
-  // whalemating driver can return to the menu cleanly.
-  V(whalematingMenuSemaphore);
-  return;
+	// 08 Feb 2012 : GWA : Please do not change this code. This is so that your
+	// whalemating driver can return to the menu cleanly.
+	V(whalematingMenuSemaphore);
+  	return;
 }
 
 void
 matchmaker(void *p, unsigned long which)
 {
 	struct semaphore * whalematingMenuSemaphore = (struct semaphore *)p;
-  (void)which;
+  	(void)which;
   
-  matchmaker_start();
-	// Implement this function 
-  matchmaker_end();
+  	matchmaker_start();
+  	lock_acquire(match_maker_lock);
+	lock_acquire(thread_count_lock);
+	thread_count++;
+	if (thread_count == 3) {
+		cv_broadcast(thread_count_cv, thread_count_lock);
+	} else {
+		cv_wait(thread_count_cv, thread_count_lock);
+	}
+	thread_count = 0;
+	lock_release(thread_count_lock);
+	lock_release(match_maker_lock);
+  	matchmaker_end();
   
-  // 08 Feb 2012 : GWA : Please do not change this code. This is so that your
-  // whalemating driver can return to the menu cleanly.
-  V(whalematingMenuSemaphore);
-  return;
+	// 08 Feb 2012 : GWA : Please do not change this code. This is so that your
+  	// whalemating driver can return to the menu cleanly.
+  	V(whalematingMenuSemaphore);
+  	return;
 }
 
 /*
@@ -225,10 +273,10 @@ gostraight(void *p, unsigned long direction)
 			KASSERT(false);
 	}
   
-  // 08 Feb 2012 : GWA : Please do not change this code. This is so that your
-  // stoplight driver can return to the menu cleanly.
-  V(stoplightMenuSemaphore);
-  return;
+  	// 08 Feb 2012 : GWA : Please do not change this code. This is so that your
+  	// stoplight driver can return to the menu cleanly.
+  	V(stoplightMenuSemaphore);
+ 	return;
 }
 
 void
@@ -297,10 +345,10 @@ turnleft(void *p, unsigned long direction)
 		default:
 			KASSERT(false);
  	} 
-  // 08 Feb 2012 : GWA : Please do not change this code. This is so that your
-  // stoplight driver can return to the menu cleanly.
-  V(stoplightMenuSemaphore);
-  return;
+  	// 08 Feb 2012 : GWA : Please do not change this code. This is so that your
+  	// stoplight driver can return to the menu cleanly.
+  	V(stoplightMenuSemaphore);
+  	return;
 }
 
 void
@@ -336,8 +384,8 @@ turnright(void *p, unsigned long direction)
 			KASSERT(false);
 	}
 
-  // 08 Feb 2012 : GWA : Please do not change this code. This is so that your
-  // stoplight driver can return to the menu cleanly.
-  V(stoplightMenuSemaphore);
-  return;
+  	// 08 Feb 2012 : GWA : Please do not change this code. This is so that your
+  	// stoplight driver can return to the menu cleanly.
+  	V(stoplightMenuSemaphore);
+  	return;
 }
