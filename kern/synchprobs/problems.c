@@ -176,12 +176,9 @@ void
 gostraight(void *p, unsigned long direction)
 {
 	struct semaphore * stoplightMenuSemaphore = (struct semaphore *)p;
-	kprintf("going straight on direction = %d\n", (int)direction);
  	switch (direction) {
 		case 0:
-			kprintf("waiting on 0\n");
 			lock_acquire(sp_intr_zero);
-			kprintf("waiting on 3\n");
 			lock_acquire(sp_intr_three);
 			
 			inQuadrant(0);
@@ -192,9 +189,7 @@ gostraight(void *p, unsigned long direction)
 			lock_release(sp_intr_three);
 			break;
 		case 1:
-			kprintf("waiting on 0\n");
 			lock_acquire(sp_intr_zero);
-			kprintf("waiting on 1\n");
 			lock_acquire(sp_intr_one);
 			
 			inQuadrant(1);
@@ -205,9 +200,7 @@ gostraight(void *p, unsigned long direction)
 			lock_release(sp_intr_zero);
 			break;
 		case 2:
-			kprintf("waiting on 1\n");
 			lock_acquire(sp_intr_one);
-			kprintf("waiting on 2\n");
 			lock_acquire(sp_intr_two);
 			
 			inQuadrant(2);
@@ -218,9 +211,7 @@ gostraight(void *p, unsigned long direction)
 			lock_release(sp_intr_one);
 			break;
 		case 3:
-			kprintf("waiting on 2\n");
 			lock_acquire(sp_intr_two);
-			kprintf("waiting on 3\n");
 			lock_acquire(sp_intr_three);
 			
 			inQuadrant(3);
@@ -244,14 +235,10 @@ void
 turnleft(void *p, unsigned long direction)
 {
 	struct semaphore * stoplightMenuSemaphore = (struct semaphore *)p;
- 	kprintf("Turning left with direction %d\n", (int)direction);
 	switch (direction) {
 		case 0:
-			kprintf("waiting on 0\n");
 			lock_acquire(sp_intr_zero);
-			kprintf("got 0, waiting on 2\n");
 			lock_acquire(sp_intr_two);
-			kprintf("got 2, waiting on 3\n");
 			lock_acquire(sp_intr_three);
 			
 			inQuadrant(0);
@@ -264,11 +251,8 @@ turnleft(void *p, unsigned long direction)
 			lock_release(sp_intr_two);
 			break;
 		case 1:
-			kprintf("waiting on 0\n");
 			lock_acquire(sp_intr_zero);
-			kprintf("waiting on 1\n");
 			lock_acquire(sp_intr_one);
-			kprintf("waiting on 3\n");
 			lock_acquire(sp_intr_three);
 			
 			inQuadrant(1);
@@ -281,11 +265,8 @@ turnleft(void *p, unsigned long direction)
 			lock_release(sp_intr_three);
 			break;
 		case 2:
-			kprintf("waiting on 0\n");
 			lock_acquire(sp_intr_zero);
-			kprintf("waiting on 1\n");
 			lock_acquire(sp_intr_one);
-			kprintf("waiting on 2\n");
 			lock_acquire(sp_intr_two);
 			
 			inQuadrant(2);
@@ -299,11 +280,8 @@ turnleft(void *p, unsigned long direction)
 			lock_release(sp_intr_zero);
 			break;
 		case 3:
-			kprintf("waiting on 0\n");
 			lock_acquire(sp_intr_one);
-			kprintf("waiting on 2\n");
 			lock_acquire(sp_intr_two);
-			kprintf("waiting on 3\n");
 			lock_acquire(sp_intr_three);
 			
 			inQuadrant(3);
@@ -329,31 +307,26 @@ void
 turnright(void *p, unsigned long direction)
 {
 	struct semaphore * stoplightMenuSemaphore = (struct semaphore *)p;
-	kprintf("turning right with direction = %d\n", (int)direction);
  	switch (direction) {
 		case 0:
-			kprintf("waiting on 0\n");
 			lock_acquire(sp_intr_zero);
 			inQuadrant(0);
 			leaveIntersection();
 			lock_release(sp_intr_zero);
 			break;
 		case 1:
-			kprintf("waiting on 1\n");
 			lock_acquire(sp_intr_one);
 			inQuadrant(1);
 			leaveIntersection();
 			lock_release(sp_intr_one);
 			break;
 		case 2:
-			kprintf("waiting on 2\n");
 			lock_acquire(sp_intr_two);
 			inQuadrant(2);
 			leaveIntersection();
 			lock_release(sp_intr_two);
 			break;
 		case 3:
-			kprintf("waiting on 3\n");
 			lock_acquire(sp_intr_three);
 			inQuadrant(3);
 			leaveIntersection();
