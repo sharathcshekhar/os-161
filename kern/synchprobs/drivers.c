@@ -148,7 +148,7 @@ inline void leaveIntersection() {
 	kprintf("%s left the intersection\n", curthread->t_name);
 }
 
-#define NCARS 99
+#define NCARS 66
 
 struct semaphore * stoplightMenuSemaphore;
 
@@ -169,7 +169,7 @@ int stoplight(int nargs, char **args) {
 
 		direction = random() % 4;
 		turn = random() % 3;
-
+		kprintf("Thread %d, direction = %d; turn = %d\n", i, direction, turn);
 		snprintf(name, sizeof(name), "Car Thread %d", i);
 
 		switch (turn) {

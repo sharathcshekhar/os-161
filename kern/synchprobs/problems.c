@@ -37,6 +37,14 @@
 #include <synch.h>
 
 /*
+ * Global locks for Stoplight problem
+ */
+struct lock *sp_intr_zero = NULL;
+struct lock *sp_intr_one = NULL;
+struct lock *sp_intr_two = NULL;
+struct lock	*sp_intr_three = NULL;
+
+/*
  * 08 Feb 2012 : GWA : Driver code is in kern/synchprobs/driver.c. We will
  * replace that file. This file is yours to modify as you see fit.
  *
@@ -137,20 +145,19 @@ matchmaker(void *p, unsigned long which)
 // functions will allow you to do local initialization. They are called at
 // the top of the corresponding driver code.
 
-struct lock *intr_zero, *intr_one, *intr_two, *intr_three;
 void stoplight_init() {
   	
-	intr_zero = lock_create("zero");
-	KASSERT(intr_zero != NULL);	
+	sp_intr_zero = lock_create("zero");
+	KASSERT(sp_intr_zero != NULL);	
 	
-	intr_one = lock_create("one");
-	KASSERT(intr_one != NULL);	
+	sp_intr_one = lock_create("one");
+	KASSERT(sp_intr_one != NULL);	
 	
-	intr_two = lock_create("two");
-	KASSERT(intr_two != NULL);	
+	sp_intr_two = lock_create("two");
+	KASSERT(sp_intr_two != NULL);	
 	
-	intr_three = lock_create("three");
-	KASSERT(intr_three != NULL);	
+	sp_intr_three = lock_create("three");
+	KASSERT(sp_intr_three != NULL);	
 	return;
 }
 
@@ -158,10 +165,10 @@ void stoplight_init() {
 // care if your problems leak memory, but if you do, use this to clean up.
 
 void stoplight_cleanup() {
-  	lock_destroy(intr_zero);
-  	lock_destroy(intr_one);
-  	lock_destroy(intr_two);
-  	lock_destroy(intr_three);
+  	lock_destroy(sp_intr_zero);
+  	lock_destroy(sp_intr_one);
+  	lock_destroy(sp_intr_two);
+  	lock_destroy(sp_intr_three);
 	return;
 }
 
@@ -169,50 +176,59 @@ void
 gostraight(void *p, unsigned long direction)
 {
 	struct semaphore * stoplightMenuSemaphore = (struct semaphore *)p;
+	kprintf("going straight on direction = %d\n", (int)direction);
  	switch (direction) {
 		case 0:
-			lock_acquire(intr_zero);
-			lock_acquire(intr_three);
+			kprintf("waiting on 0\n");
+			lock_acquire(sp_intr_zero);
+			kprintf("waiting on 3\n");
+			lock_acquire(sp_intr_three);
 			
 			inQuadrant(0);
 			inQuadrant(3);
-			lock_release(intr_zero);
+			lock_release(sp_intr_zero);
 			
 			leaveIntersection();
-			lock_release(intr_three);
+			lock_release(sp_intr_three);
 			break;
 		case 1:
-			lock_acquire(intr_zero);
-			lock_acquire(intr_one);
+			kprintf("waiting on 0\n");
+			lock_acquire(sp_intr_zero);
+			kprintf("waiting on 1\n");
+			lock_acquire(sp_intr_one);
 			
 			inQuadrant(1);
 			inQuadrant(0);
-			lock_release(intr_one);
+			lock_release(sp_intr_one);
 			
 			leaveIntersection();
-			lock_release(intr_zero);
+			lock_release(sp_intr_zero);
 			break;
 		case 2:
-			lock_acquire(intr_one);
-			lock_acquire(intr_two);
+			kprintf("waiting on 1\n");
+			lock_acquire(sp_intr_one);
+			kprintf("waiting on 2\n");
+			lock_acquire(sp_intr_two);
 			
 			inQuadrant(2);
 			inQuadrant(1);
-			lock_release(intr_two);
+			lock_release(sp_intr_two);
 			
 			leaveIntersection();
-			lock_release(intr_one);
+			lock_release(sp_intr_one);
 			break;
 		case 3:
-			lock_acquire(intr_two);
-			lock_acquire(intr_three);
+			kprintf("waiting on 2\n");
+			lock_acquire(sp_intr_two);
+			kprintf("waiting on 3\n");
+			lock_acquire(sp_intr_three);
 			
 			inQuadrant(3);
 			inQuadrant(2);
-			lock_release(intr_three);
+			lock_release(sp_intr_three);
 			
 			leaveIntersection();
-			lock_release(intr_two);
+			lock_release(sp_intr_two);
 			break;
 		default:
 			KASSERT(false);
@@ -228,64 +244,77 @@ void
 turnleft(void *p, unsigned long direction)
 {
 	struct semaphore * stoplightMenuSemaphore = (struct semaphore *)p;
- 	switch (direction) {
+ 	kprintf("Turning left with direction %d\n", (int)direction);
+	switch (direction) {
 		case 0:
-			lock_acquire(intr_zero);
-			lock_acquire(intr_two);
-			lock_acquire(intr_three);
+			kprintf("waiting on 0\n");
+			lock_acquire(sp_intr_zero);
+			kprintf("got 0, waiting on 2\n");
+			lock_acquire(sp_intr_two);
+			kprintf("got 2, waiting on 3\n");
+			lock_acquire(sp_intr_three);
 			
 			inQuadrant(0);
 			inQuadrant(3);
-			lock_release(intr_zero);
+			lock_release(sp_intr_zero);
 			inQuadrant(2);
-			lock_release(intr_three);
+			lock_release(sp_intr_three);
 			
 			leaveIntersection();
-			lock_release(intr_two);
+			lock_release(sp_intr_two);
 			break;
 		case 1:
-			lock_acquire(intr_zero);
-			lock_acquire(intr_one);
-			lock_acquire(intr_three);
+			kprintf("waiting on 0\n");
+			lock_acquire(sp_intr_zero);
+			kprintf("waiting on 1\n");
+			lock_acquire(sp_intr_one);
+			kprintf("waiting on 3\n");
+			lock_acquire(sp_intr_three);
 			
 			inQuadrant(1);
 			inQuadrant(0);
-			lock_release(intr_one);
+			lock_release(sp_intr_one);
 			inQuadrant(3);
-			lock_release(intr_zero);
+			lock_release(sp_intr_zero);
 			
 			leaveIntersection();
-			lock_release(intr_three);
+			lock_release(sp_intr_three);
 			break;
 		case 2:
-			lock_acquire(intr_zero);
-			lock_acquire(intr_one);
-			lock_acquire(intr_two);
+			kprintf("waiting on 0\n");
+			lock_acquire(sp_intr_zero);
+			kprintf("waiting on 1\n");
+			lock_acquire(sp_intr_one);
+			kprintf("waiting on 2\n");
+			lock_acquire(sp_intr_two);
 			
 			inQuadrant(2);
 			inQuadrant(1);
-			lock_release(intr_two);
+			lock_release(sp_intr_two);
 			
 			inQuadrant(0);
-			lock_release(intr_one);
+			lock_release(sp_intr_one);
 			
 			leaveIntersection();
-			lock_release(intr_zero);
+			lock_release(sp_intr_zero);
 			break;
 		case 3:
-			lock_acquire(intr_one);
-			lock_acquire(intr_two);
-			lock_acquire(intr_three);
+			kprintf("waiting on 0\n");
+			lock_acquire(sp_intr_one);
+			kprintf("waiting on 2\n");
+			lock_acquire(sp_intr_two);
+			kprintf("waiting on 3\n");
+			lock_acquire(sp_intr_three);
 			
 			inQuadrant(3);
 			inQuadrant(2);
-			lock_release(intr_three);
+			lock_release(sp_intr_three);
 			
 			inQuadrant(1);
-			lock_release(intr_two);
+			lock_release(sp_intr_two);
 			
 			leaveIntersection();
-			lock_release(intr_one);
+			lock_release(sp_intr_one);
 			break;
 		default:
 			KASSERT(false);
@@ -300,30 +329,35 @@ void
 turnright(void *p, unsigned long direction)
 {
 	struct semaphore * stoplightMenuSemaphore = (struct semaphore *)p;
+	kprintf("turning right with direction = %d\n", (int)direction);
  	switch (direction) {
 		case 0:
-			lock_acquire(intr_zero);
+			kprintf("waiting on 0\n");
+			lock_acquire(sp_intr_zero);
 			inQuadrant(0);
 			leaveIntersection();
-			lock_release(intr_zero);
+			lock_release(sp_intr_zero);
 			break;
 		case 1:
-			lock_acquire(intr_one);
+			kprintf("waiting on 1\n");
+			lock_acquire(sp_intr_one);
 			inQuadrant(1);
 			leaveIntersection();
-			lock_release(intr_one);
+			lock_release(sp_intr_one);
 			break;
 		case 2:
-			lock_acquire(intr_two);
+			kprintf("waiting on 2\n");
+			lock_acquire(sp_intr_two);
 			inQuadrant(2);
 			leaveIntersection();
-			lock_release(intr_two);
+			lock_release(sp_intr_two);
 			break;
 		case 3:
-			lock_acquire(intr_three);
+			kprintf("waiting on 3\n");
+			lock_acquire(sp_intr_three);
 			inQuadrant(3);
 			leaveIntersection();
-			lock_release(intr_three);
+			lock_release(sp_intr_three);
 			break;
 		default:
 			KASSERT(false);
