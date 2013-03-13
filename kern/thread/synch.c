@@ -257,7 +257,6 @@ cv_create(const char *name)
 		return NULL;
 	}
 
-	spinlock_init(&cv->cv_lock);
 	return cv;
 }
 
@@ -265,8 +264,7 @@ void
 cv_destroy(struct cv *cv)
 {
 	 KASSERT(cv != NULL);
-	/* wchan_cleanup will assert if anyone's waiting on it */
-	spinlock_cleanup(&cv->cv_lock);
+	/* wchan_destroy will assert if anyone's waiting on it */
 	wchan_destroy(cv->cv_wchan);
 	kfree(cv->cv_name);
 	kfree(cv);
@@ -278,11 +276,11 @@ cv_wait(struct cv *cv, struct lock *lock)
 	KASSERT(cv != NULL);
 	KASSERT(curthread->t_in_interrupt == false);
 	KASSERT(lock_do_i_hold(lock) == true);
-	
-	spinlock_acquire(&cv->cv_lock);
+	/*
+	 * Automically drop the lock and sleeping. Pick
+	 * it up as soon as waking up, before returning
+	 */ 	
 	wchan_lock(cv->cv_wchan);
-	spinlock_release(&cv->cv_lock);
-	
 	lock_release(lock);
 	wchan_sleep(cv->cv_wchan);
 	lock_acquire(lock);
@@ -294,9 +292,7 @@ cv_signal(struct cv *cv, struct lock *lock)
 	KASSERT(cv != NULL);
 	KASSERT(lock_do_i_hold(lock) == true);
 	
-	spinlock_acquire(&cv->cv_lock);
 	wchan_wakeone(cv->cv_wchan);
-	spinlock_release(&cv->cv_lock);
 }
 
 void
@@ -305,9 +301,7 @@ cv_broadcast(struct cv *cv, struct lock *lock)
 	KASSERT(cv != NULL);
 	KASSERT(lock_do_i_hold(lock) == true);
 	
-	spinlock_acquire(&cv->cv_lock);
 	wchan_wakeall(cv->cv_wchan);
-	spinlock_release(&cv->cv_lock);
 }
 
 /*
