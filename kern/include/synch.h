@@ -73,9 +73,14 @@ void V(struct semaphore *);
  * (should be) made internally.
  */
 struct lock {
-        char *lk_name;
-        // add what you need here
-        // (don't forget to mark things volatile as needed)
+	char *lk_name;
+	struct wchan *lk_wchan;
+	struct spinlock lk_lock;
+	/* 
+	 * lk_holder will be NULL
+	 * if nobody is holding the lock
+	 */
+	struct thread *lk_holder;
 };
 
 struct lock *lock_create(const char *name);
@@ -112,9 +117,8 @@ void lock_destroy(struct lock *);
  */
 
 struct cv {
-        char *cv_name;
-        // add what you need here
-        // (don't forget to mark things volatile as needed)
+    char *cv_name;
+	struct wchan *cv_wchan;
 };
 
 struct cv *cv_create(const char *name);
@@ -141,8 +145,20 @@ void cv_broadcast(struct cv *cv, struct lock *lock);
  * 13 Feb 2012 : GWA : Reader-writer locks.
  */
 
+/*
+ * 22 Feb: Sharath implementation
+ */
+
+#define RDWR_LOCK_SEM_INIT_VAL 1
+
 struct rwlock {
-        char *rwlock_name;
+	char *lk_name;
+	struct lock *count_lock;
+	struct semaphore *lk_sem;
+   	struct {
+		int read;
+		int write;
+	} rdwr_count;
 };
 
 struct rwlock * rwlock_create(const char *);

@@ -37,6 +37,23 @@
 #include <synch.h>
 
 /*
+ * Global locks for Stoplight problem
+ */
+struct lock *sp_intr_zero = NULL;
+struct lock *sp_intr_one = NULL;
+struct lock *sp_intr_two = NULL;
+struct lock	*sp_intr_three = NULL;
+
+struct lock *male_lock = NULL;
+struct lock *female_lock = NULL;
+struct lock *match_maker_lock = NULL;
+struct lock *thread_count_lock = NULL;
+
+struct cv *thread_count_cv = NULL;
+
+int thread_count = 0;
+
+/*
  * 08 Feb 2012 : GWA : Driver code is in kern/synchprobs/driver.c. We will
  * replace that file. This file is yours to modify as you see fit.
  *
@@ -48,13 +65,22 @@
 // the top of the corresponding driver code.
 
 void whalemating_init() {
-  return;
+	male_lock = lock_create("male");
+	female_lock = lock_create("female");
+	match_maker_lock = lock_create("match_maker");
+	thread_count_lock = lock_create("counter");
+	thread_count_cv = cv_create("count_cv");
+	return;
 }
-
 // 20 Feb 2012 : GWA : Adding at the suggestion of Nikhil Londhe. We don't
 // care if your problems leak memory, but if you do, use this to clean up.
 
 void whalemating_cleanup() {
+	lock_destroy(male_lock);
+	lock_destroy(female_lock);
+	lock_destroy(match_maker_lock);
+	lock_destroy(thread_count_lock);
+	cv_destroy(thread_count_cv);
   return;
 }
 
@@ -62,48 +88,78 @@ void
 male(void *p, unsigned long which)
 {
 	struct semaphore * whalematingMenuSemaphore = (struct semaphore *)p;
-  (void)which;
+  	(void)which;
   
-  male_start();
-	// Implement this function 
-  male_end();
-
-  // 08 Feb 2012 : GWA : Please do not change this code. This is so that your
-  // whalemating driver can return to the menu cleanly.
-  V(whalematingMenuSemaphore);
-  return;
+  	male_start();
+	lock_acquire(male_lock);
+	lock_acquire(thread_count_lock);
+	thread_count++;
+	if (thread_count == 3) {
+		cv_broadcast(thread_count_cv, thread_count_lock);
+	} else {
+		cv_wait(thread_count_cv, thread_count_lock);
+	}
+	thread_count = 0;
+	lock_release(thread_count_lock);
+	lock_release(male_lock);		
+ 	male_end();
+	
+	// 08 Feb 2012 : GWA : Please do not change this code. This is so that your
+	// whalemating driver can return to the menu cleanly.
+ 	V(whalematingMenuSemaphore);
+  	return;
 }
 
 void
 female(void *p, unsigned long which)
 {
 	struct semaphore * whalematingMenuSemaphore = (struct semaphore *)p;
-  (void)which;
+  	(void)which;
   
-  female_start();
-	// Implement this function 
-  female_end();
+  	female_start();
+  	lock_acquire(female_lock);
+	lock_acquire(thread_count_lock);
+	thread_count++;
+	if (thread_count == 3) {
+		cv_broadcast(thread_count_cv, thread_count_lock);
+	} else {
+		cv_wait(thread_count_cv, thread_count_lock);
+	}
+	thread_count = 0;
+	lock_release(thread_count_lock);
+	lock_release(female_lock);
+  	female_end();
   
-  // 08 Feb 2012 : GWA : Please do not change this code. This is so that your
-  // whalemating driver can return to the menu cleanly.
-  V(whalematingMenuSemaphore);
-  return;
+	// 08 Feb 2012 : GWA : Please do not change this code. This is so that your
+	// whalemating driver can return to the menu cleanly.
+	V(whalematingMenuSemaphore);
+  	return;
 }
 
 void
 matchmaker(void *p, unsigned long which)
 {
 	struct semaphore * whalematingMenuSemaphore = (struct semaphore *)p;
-  (void)which;
+  	(void)which;
   
-  matchmaker_start();
-	// Implement this function 
-  matchmaker_end();
+  	matchmaker_start();
+  	lock_acquire(match_maker_lock);
+	lock_acquire(thread_count_lock);
+	thread_count++;
+	if (thread_count == 3) {
+		cv_broadcast(thread_count_cv, thread_count_lock);
+	} else {
+		cv_wait(thread_count_cv, thread_count_lock);
+	}
+	thread_count = 0;
+	lock_release(thread_count_lock);
+	lock_release(match_maker_lock);
+  	matchmaker_end();
   
-  // 08 Feb 2012 : GWA : Please do not change this code. This is so that your
-  // whalemating driver can return to the menu cleanly.
-  V(whalematingMenuSemaphore);
-  return;
+	// 08 Feb 2012 : GWA : Please do not change this code. This is so that your
+  	// whalemating driver can return to the menu cleanly.
+  	V(whalematingMenuSemaphore);
+  	return;
 }
 
 /*
@@ -138,48 +194,198 @@ matchmaker(void *p, unsigned long which)
 // the top of the corresponding driver code.
 
 void stoplight_init() {
-  return;
+  	
+	sp_intr_zero = lock_create("zero");
+	KASSERT(sp_intr_zero != NULL);	
+	
+	sp_intr_one = lock_create("one");
+	KASSERT(sp_intr_one != NULL);	
+	
+	sp_intr_two = lock_create("two");
+	KASSERT(sp_intr_two != NULL);	
+	
+	sp_intr_three = lock_create("three");
+	KASSERT(sp_intr_three != NULL);	
+	return;
 }
 
 // 20 Feb 2012 : GWA : Adding at the suggestion of Nikhil Londhe. We don't
 // care if your problems leak memory, but if you do, use this to clean up.
 
 void stoplight_cleanup() {
-  return;
+  	lock_destroy(sp_intr_zero);
+  	lock_destroy(sp_intr_one);
+  	lock_destroy(sp_intr_two);
+  	lock_destroy(sp_intr_three);
+	return;
 }
 
 void
 gostraight(void *p, unsigned long direction)
 {
 	struct semaphore * stoplightMenuSemaphore = (struct semaphore *)p;
-  (void)direction;
+ 	switch (direction) {
+		case 0:
+			lock_acquire(sp_intr_zero);
+			lock_acquire(sp_intr_three);
+			
+			inQuadrant(0);
+			inQuadrant(3);
+			lock_release(sp_intr_zero);
+			
+			leaveIntersection();
+			lock_release(sp_intr_three);
+			break;
+		case 1:
+			lock_acquire(sp_intr_zero);
+			lock_acquire(sp_intr_one);
+			
+			inQuadrant(1);
+			inQuadrant(0);
+			lock_release(sp_intr_one);
+			
+			leaveIntersection();
+			lock_release(sp_intr_zero);
+			break;
+		case 2:
+			lock_acquire(sp_intr_one);
+			lock_acquire(sp_intr_two);
+			
+			inQuadrant(2);
+			inQuadrant(1);
+			lock_release(sp_intr_two);
+			
+			leaveIntersection();
+			lock_release(sp_intr_one);
+			break;
+		case 3:
+			lock_acquire(sp_intr_two);
+			lock_acquire(sp_intr_three);
+			
+			inQuadrant(3);
+			inQuadrant(2);
+			lock_release(sp_intr_three);
+			
+			leaveIntersection();
+			lock_release(sp_intr_two);
+			break;
+		default:
+			KASSERT(false);
+	}
   
-  // 08 Feb 2012 : GWA : Please do not change this code. This is so that your
-  // stoplight driver can return to the menu cleanly.
-  V(stoplightMenuSemaphore);
-  return;
+  	// 08 Feb 2012 : GWA : Please do not change this code. This is so that your
+  	// stoplight driver can return to the menu cleanly.
+  	V(stoplightMenuSemaphore);
+ 	return;
 }
 
 void
 turnleft(void *p, unsigned long direction)
 {
 	struct semaphore * stoplightMenuSemaphore = (struct semaphore *)p;
-  (void)direction;
-  
-  // 08 Feb 2012 : GWA : Please do not change this code. This is so that your
-  // stoplight driver can return to the menu cleanly.
-  V(stoplightMenuSemaphore);
-  return;
+	switch (direction) {
+		case 0:
+			lock_acquire(sp_intr_zero);
+			lock_acquire(sp_intr_two);
+			lock_acquire(sp_intr_three);
+			
+			inQuadrant(0);
+			inQuadrant(3);
+			lock_release(sp_intr_zero);
+			inQuadrant(2);
+			lock_release(sp_intr_three);
+			
+			leaveIntersection();
+			lock_release(sp_intr_two);
+			break;
+		case 1:
+			lock_acquire(sp_intr_zero);
+			lock_acquire(sp_intr_one);
+			lock_acquire(sp_intr_three);
+			
+			inQuadrant(1);
+			inQuadrant(0);
+			lock_release(sp_intr_one);
+			inQuadrant(3);
+			lock_release(sp_intr_zero);
+			
+			leaveIntersection();
+			lock_release(sp_intr_three);
+			break;
+		case 2:
+			lock_acquire(sp_intr_zero);
+			lock_acquire(sp_intr_one);
+			lock_acquire(sp_intr_two);
+			
+			inQuadrant(2);
+			inQuadrant(1);
+			lock_release(sp_intr_two);
+			
+			inQuadrant(0);
+			lock_release(sp_intr_one);
+			
+			leaveIntersection();
+			lock_release(sp_intr_zero);
+			break;
+		case 3:
+			lock_acquire(sp_intr_one);
+			lock_acquire(sp_intr_two);
+			lock_acquire(sp_intr_three);
+			
+			inQuadrant(3);
+			inQuadrant(2);
+			lock_release(sp_intr_three);
+			
+			inQuadrant(1);
+			lock_release(sp_intr_two);
+			
+			leaveIntersection();
+			lock_release(sp_intr_one);
+			break;
+		default:
+			KASSERT(false);
+ 	} 
+  	// 08 Feb 2012 : GWA : Please do not change this code. This is so that your
+  	// stoplight driver can return to the menu cleanly.
+  	V(stoplightMenuSemaphore);
+  	return;
 }
 
 void
 turnright(void *p, unsigned long direction)
 {
 	struct semaphore * stoplightMenuSemaphore = (struct semaphore *)p;
-  (void)direction;
+ 	switch (direction) {
+		case 0:
+			lock_acquire(sp_intr_zero);
+			inQuadrant(0);
+			leaveIntersection();
+			lock_release(sp_intr_zero);
+			break;
+		case 1:
+			lock_acquire(sp_intr_one);
+			inQuadrant(1);
+			leaveIntersection();
+			lock_release(sp_intr_one);
+			break;
+		case 2:
+			lock_acquire(sp_intr_two);
+			inQuadrant(2);
+			leaveIntersection();
+			lock_release(sp_intr_two);
+			break;
+		case 3:
+			lock_acquire(sp_intr_three);
+			inQuadrant(3);
+			leaveIntersection();
+			lock_release(sp_intr_three);
+			break;
+		default:
+			KASSERT(false);
+	}
 
-  // 08 Feb 2012 : GWA : Please do not change this code. This is so that your
-  // stoplight driver can return to the menu cleanly.
-  V(stoplightMenuSemaphore);
-  return;
+  	// 08 Feb 2012 : GWA : Please do not change this code. This is so that your
+  	// stoplight driver can return to the menu cleanly.
+  	V(stoplightMenuSemaphore);
+  	return;
 }

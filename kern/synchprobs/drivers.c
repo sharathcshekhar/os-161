@@ -169,7 +169,7 @@ int stoplight(int nargs, char **args) {
 
 		direction = random() % 4;
 		turn = random() % 3;
-
+		kprintf("Thread %d, direction = %d; turn = %d\n", i, direction, turn);
 		snprintf(name, sizeof(name), "Car Thread %d", i);
 
 		switch (turn) {
