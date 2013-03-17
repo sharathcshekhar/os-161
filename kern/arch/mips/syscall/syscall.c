@@ -36,6 +36,7 @@
 #include <current.h>
 #include <syscall.h>
 
+#include <copyinout.h>
 
 /*
  * System call dispatcher.
@@ -75,6 +76,13 @@
  * stack, starting at sp+16 to skip over the slots for the
  * registerized values, with copyin().
  */
+
+/*
+ * Adding a quick and dirty write() using kprintf
+ * This is used only for logging error messages
+ */
+int sys__write(int fd, userptr_t buf, int size);
+
 void
 syscall(struct trapframe *tf)
 {
@@ -108,9 +116,14 @@ syscall(struct trapframe *tf)
 		err = sys___time((userptr_t)tf->tf_a0,
 				 (userptr_t)tf->tf_a1);
 		break;
+		
+		case SYS_write:
+			err = sys__write(tf->tf_a0, (userptr_t)tf->tf_a1,
+					tf->tf_a2);
+		break;
 
-	    /* Add stuff here */
- 
+		/* Add stuff here */
+		 
 	    default:
 		kprintf("Unknown syscall %d\n", callno);
 		err = ENOSYS;
@@ -158,4 +171,24 @@ void
 enter_forked_process(struct trapframe *tf)
 {
 	(void)tf;
+}
+
+/*
+ * This should be replaced with a full fledged write 
+ * and placed in a separate file
+ */
+int 
+sys__write(int fd, userptr_t buf, int size)
+{
+	char *str;
+	int ret;
+	str = kmalloc(size+1);
+	KASSERT(str);
+	ret = copyin(buf, str, size);
+	KASSERT(ret == 0);
+	str[size] = '\0';
+	kprintf("Write fd = %d: ", fd);
+	kprintf("%s\n", str);
+	kfree(str);
+	return 0;
 }
