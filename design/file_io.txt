@@ -1,0 +1,22 @@
+File System related calls:
+
+1. open:
+args in: char *filename, int openflags, int mode
+args out: file descriptor
+Ignore mode for now. Pass 0 always.
+
+Definitions:
+MAX_PATH = 512 (defined as 4096 in kernel)
+FILES_PER_PROCESS = 32
+
+Helper Functions:
+strncpy_from_user() /* wrapper around copyin like kernel */
+
+Data Structures used:
+currentThread -> process_structure-> file_table
+
+Algorithm:
+
+1. copyin() filename from userspace. Copy till null termination or till MAX_PATH
+2. Check the process table file count if the user has exceeded the limit per process, if yes, exit with error
+3. Call vfs_open() 

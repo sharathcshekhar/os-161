@@ -6,4 +6,8 @@ depend
 defs.mk
 build
 /user/testbin/randcall/calls.c
+/user/testbin/*/*.depend
+/user/bin/*/*.depend
+/user/sbin/*/*.depend
+/user/lib/*/*.depend
 *.swp

@@ -83,6 +83,10 @@
  * This is used only for logging error messages
  */
 int sys__write(int fd, userptr_t buf, int size);
+/*
+ * Enabling getchar()
+ */ 
+int sys__read(int fd, userptr_t buf, int size);
 
 void
 syscall(struct trapframe *tf)
@@ -122,7 +126,12 @@ syscall(struct trapframe *tf)
 			err = sys__write(tf->tf_a0, (userptr_t)tf->tf_a1,
 					tf->tf_a2);
 		break;
-
+		/*
+		case SYS_read:
+			err = sys__read(tf->tf_a0, (userptr_t)tf->tf_a1,
+					tf->tf_a2);
+		break;
+		*/
 		/* Add stuff here */
  
 	    default:
@@ -183,13 +192,41 @@ sys__write(int fd, userptr_t buf, int size)
 {
 	char *str;
 	int ret;
+	/* supress warning */
+	(void) fd;
 	str = kmalloc(size+1);
 	KASSERT(str);
 	ret = copyin(buf, str, size);
 	KASSERT(ret == 0);
 	str[size] = '\0';
-	kprintf("Write fd = %d: ", fd);
-	kprintf("%s\n", str);
+	//kprintf("Write fd = %d: ", fd);
+	kprintf("%s", str);
 	kfree(str);
-	return 0;
+	return size;
 }
+
+#if 0
+/*
+ * This should be replaced with a full fledged read 
+ * and placed in a separate file
+ * Reads 1 character at a time from the stdin
+ */
+int 
+sys__read(int fd, userptr_t buf, int size)
+{
+	/* supress warning */
+	(void) fd;
+	/*only getchar() sould work, panic if not*/
+	KASSERT(size == 1);
+	int ret;
+	char ch;
+	//kprintf("Read fd = %d: ", fd);
+	kgets(&ch, 1);
+	kprintf("Read char = %d\n", ch);
+	ret = copyout(&ch, buf, size);
+	KASSERT(ret == 0);
+	//ch = getch();
+	//kprintf("Read char = %d\n", ch);
+	return 1;
+}
+#endif
