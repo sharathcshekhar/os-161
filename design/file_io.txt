@@ -1,9 +1,5 @@
 File System related calls:
 
-1. open:
-args in: char *filename, int openflags, int mode
-args out: file descriptor
-Ignore mode for now. Pass 0 always.
 
 Definitions:
 MAX_PATH = 512 (defined as 4096 in kernel)
@@ -13,10 +9,82 @@ Helper Functions:
 strncpy_from_user() /* wrapper around copyin like kernel */
 
 Data Structures used:
-currentThread -> process_structure-> file_table
+
+file_table: An array of pointers to the global_filetable_list
+reference: currentThread -> process_structure-> file_table
+
+global_filetable_list
+reference: global data structure, init'd on boot
+<Use lock to access the global data structure>
+
+1. open():
+args in: char *filename, int openflags, int mode
+args out: file descriptor
+Ignore mode for now. Pass 0 always.
 
 Algorithm:
-
 1. copyin() filename from userspace. Copy till null termination or till MAX_PATH
 2. Check the process table file count if the user has exceeded the limit per process, if yes, exit with error
-3. Call vfs_open() 
+check the global filetable_list count, if the user has exceeded the no of global files, is yes, return error
+3. Validate the path name
+4. Call vfs_open()
+5. add a new node to global_filetable_list, make the vnode pointer of the node to point to the vnode 
+pointer filled after vfs_open returns, if vfs_open() has an error, return
+6. Find the smallest free index in file_table, point it to the newly created node in the global_filetable_list
+7. make the open_count to 1, set the flags
+8. If the file is opened for append, offset has to be at the end of file, if opened from read, it has to be at 0
+9. If opened for read, the whole file should become empty and the offset should be at 0
+10. return the index in file_table. This is the file descriptor
+
+
+2. read():
+args in: int fd, void* buf, int size
+args out: no of bytes read
+
+Algorithm:
+1. Check if the fd passed has a entry in the process_file_table, if not return error
+2. Get the file handle from the global_filetable_list <dereference the pointer pointed by process_file_table[fd]
+3. Check if the file was opened with read perms, if not return error
+4. Create uimove structure with offset as value pointed in the file handle
+5. Call VOP_READ() by passing uimove structure
+6. Sit back and replax while VFS does the work
+7. Advance the offset to the no of bytes read
+8. Return the no of byte read
+
+
+3. write():
+args in: int fd, void* buf, int size
+args out: no of bytes written
+
+Algorithm:
+1. Check if the fd passed has a entry in the process_file_table, if not return error
+2. Get the file handle from the global_filetable_list <dereference the pointer pointed by process_file_table[fd]
+3. Check if the file was opened with write permissions, if not return error
+4. Create uimove structure with offset as value pointed in the file handle
+5. Call VOP_WRITE() by passing uimove structure
+6. Sit back and replax while VFS does the work
+7. Advance the offset to the no of bytes written
+8. Return the no of byte written
+
+
+4. lseek
+Algorithm:
+1. Check if the fd passed has a entry in the process_file_table, if not return error
+2. Get the file handle from the global_filetable_list <dereference the pointer pointed by process_file_table[fd]
+3. Set the offset in the file handle
+ 
+5. close
+Algorithm:
+1. Check if the fd passed has a entry in the process_file_table, if not return error
+2. Get the file handle from the global_filetable_list <dereference the pointer pointed by process_file_table[fd]
+3. Decrement the reference count in the file handle
+4. If this was the last reference, call VOP_CLOSE()
+5. Decrement the file_open count, delete the file handle node
+6. Mark the file_table[fd] to NULL
+7. return 
+ 
+6. dup2
+
+7. chdir
+ 
+8. __getcwd
