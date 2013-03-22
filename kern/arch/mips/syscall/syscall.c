@@ -37,6 +37,11 @@
 #include <syscall.h>
 
 #include <copyinout.h>
+#include <vnode.h>
+
+#define MAX_PATH 512
+#define FILES_PER_PROCESS 32
+
 
 
 /*
@@ -83,6 +88,10 @@
  * This is used only for logging error messages
  */
 int sys__write(int fd, userptr_t buf, int size);
+
+strncpy_fromUser(userptr_t source, char *destination, int len);
+
+int sys__open(userptr_t fileName, int flags, int mode);
 /*
  * Enabling getchar()
  */ 
@@ -126,6 +135,10 @@ syscall(struct trapframe *tf)
 			err = sys__write(tf->tf_a0, (userptr_t)tf->tf_a1,
 					tf->tf_a2);
 		break;
+
+		case SYS_open:
+					err = sys__open((userptr_t)tf->tf_a0, tf->tf_a1, tf->tf_a2);
+				break;
 		/*
 		case SYS_read:
 			err = sys__read(tf->tf_a0, (userptr_t)tf->tf_a1,
@@ -230,3 +243,73 @@ sys__read(int fd, userptr_t buf, int size)
 	return 1;
 }
 #endif
+
+/***********************************************************************
+ * OPEN (STILL DRAFT)
+ * List of errors to Return:
+ * 1. If source = NULL, Return EFAULT
+ * 2. If strncpy_user fails, return -1:
+ *
+ * After vfs_open if
+ * 1. Result = 0 then assign File Descriptor
+ * 2. Result = 25 then ENODEV error has occurred
+ * 3. Result = 17 then ENOTDIR error has occurred
+ * 4. Result = 19 then ENOENT error has occurred
+ * 5. Result = 22 then EEXIST error has occurred
+ * 6. Result = 18 then EISDIR error has occurred
+ * 7. Result = 28 then EMFILE error has occurred
+ * 8. Result = 29 then ENFILE error has occurred
+ * 9. Result = 26 then ENXIO error has occurred
+ * 10. Result = 36 then ENOSPC error has occurred
+ * 11. Result = 8 then EINVAL error has occurred
+ * 12. Result = 32 then EIO error has occurred
+  **********************************************************************/
+
+int
+sys__open(userptr_t fileName, int flags, int mode){
+
+	int result, cpResult;
+	char *flName = kalloc(MAX_PATH);
+
+	struct vnode *tempNode;
+	if(fileName == NULL){
+		return EFAULT;
+	}
+	cpResult = strcpy_fromUser(fileName, flName, MAX_PATH);
+	if(cpResult){
+		return cpResult;
+	}
+
+	result = vfs_open(fileName, flags, mode, &tempNode);
+
+	if(result){
+		return result;
+	}
+	else{
+		//assign file descriptor here
+	}
+	return 5;
+}
+
+int
+strncpy_fromUser(userptr_t source, char *destination, int len){
+	int counter=0;
+	int cpyResult;
+
+	KASSERT(destination!=NULL);
+
+	while(counter <= len) {
+		cpyResult = copyin(source+counter,destination+counter,1);
+		if(cpyResult){
+			return cpyResult;
+		}
+
+		if((destination[counter] == '\0')){
+			return 0;
+		}
+		counter++;
+	}
+	return -1;
+}
+
+
