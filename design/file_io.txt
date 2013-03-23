@@ -1,12 +1,11 @@
 File System related calls:
 
-
 Definitions:
 MAX_PATH = 512 (defined as 4096 in kernel)
 FILES_PER_PROCESS = 32
 
 Helper Functions:
-strncpy_from_user() /* wrapper around copyin like kernel */
+strncpy_from_user() /* wrapper around copyin like kernel */ copyinstr() exists
 
 Data Structures used:
 
@@ -26,16 +25,15 @@ Algorithm:
 1. copyin() filename from userspace. Copy till null termination or till MAX_PATH
 2. Check the process table file count if the user has exceeded the limit per process, if yes, exit with error
 check the global filetable_list count, if the user has exceeded the no of global files, is yes, return error
-3. Validate the path name
+3. Validate the path name, validate flags
 4. Call vfs_open()
 5. add a new node to global_filetable_list, make the vnode pointer of the node to point to the vnode 
 pointer filled after vfs_open returns, if vfs_open() has an error, return
 6. Find the smallest free index in file_table, point it to the newly created node in the global_filetable_list
 7. make the open_count to 1, set the flags
 8. If the file is opened for append, offset has to be at the end of file, if opened from read, it has to be at 0
-9. If opened for read, the whole file should become empty and the offset should be at 0
-10. return the index in file_table. This is the file descriptor
-
+(Call VOP_STAT() to the get the size of file and set the offset to that position)
+9. return the index in file_table. This is the file descriptor
 
 2. read():
 args in: int fd, void* buf, int size
@@ -45,12 +43,11 @@ Algorithm:
 1. Check if the fd passed has a entry in the process_file_table, if not return error
 2. Get the file handle from the global_filetable_list <dereference the pointer pointed by process_file_table[fd]
 3. Check if the file was opened with read perms, if not return error
-4. Create uimove structure with offset as value pointed in the file handle
+4. Create uio structure with offset as value pointed in the file handle
 5. Call VOP_READ() by passing uimove structure
 6. Sit back and replax while VFS does the work
 7. Advance the offset to the no of bytes read
 8. Return the no of byte read
-
 
 3. write():
 args in: int fd, void* buf, int size
@@ -66,14 +63,20 @@ Algorithm:
 7. Advance the offset to the no of bytes written
 8. Return the no of byte written
 
-
-4. lseek
+4. lseek()
+@args in int fd 
+	off_t pos
+	int whence - 	SEEK_SET 
+			SEEK_CUR
+			SEEK_END 
 Algorithm:
-1. Check if the fd passed has a entry in the process_file_table, if not return error
-2. Get the file handle from the global_filetable_list <dereference the pointer pointed by process_file_table[fd]
-3. Set the offset in the file handle
+1. a0 has fd, a2/a3 has pos, read whence by doing a 4 byte copyin from (sp+16)
+2. Check if the fd passed has a entry in the process_file_table, if not return error
+3. Get the file handle from the global_filetable_list <dereference the pointer pointed by process_file_table[fd]
+4. validate off_t by checking VOP_STAT(), fail for console devices
+5. Set the offset in the file handle to whence+pos
  
-5. close
+5. close()
 Algorithm:
 1. Check if the fd passed has a entry in the process_file_table, if not return error
 2. Get the file handle from the global_filetable_list <dereference the pointer pointed by process_file_table[fd]
@@ -83,8 +86,17 @@ Algorithm:
 6. Mark the file_table[fd] to NULL
 7. return 
  
-6. dup2
+6. dup2()
+Algorithm:
+1. Validate old_fd and see if new_fd is not it use
+2. Point the file_table[new_fd] to global file handle table
+3. Increment the reference count in the global table by 1
+4. Increment the process file count by 1 and return
 
-7. chdir
+7. chdir()
+1. copyin the pathname
+2. Direct call to vfs_chdir()
  
-8. __getcwd
+8. __getcwd()
+1. Polulate uio struct
+2. Call vfs_cwd()
