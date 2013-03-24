@@ -13,8 +13,7 @@ void pid_init(void);
 struct process_struct* create_process_table(void);
 int open_std_streams(struct global_file_handler **file_table);
 
-struct thread;
-
+extern struct thread *curthread;
 extern uint32_t pid_map[MAX_PID/(sizeof(int) * 8)];
 extern int pid_count;
 

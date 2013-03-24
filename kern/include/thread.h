@@ -38,6 +38,7 @@
 
 #include <spinlock.h>
 #include <threadlist.h>
+#include <process.h>
 
 struct addrspace;
 struct cpu;
@@ -112,6 +113,7 @@ struct thread {
 	struct vnode *t_cwd;		/* current working directory */
 
 	/* add more here as needed */
+	struct process_struct *process_table;
 };
 
 /* Call once during system startup to allocate data structures. */

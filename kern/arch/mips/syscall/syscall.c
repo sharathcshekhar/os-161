@@ -38,6 +38,10 @@
 
 #include <copyinout.h>
 
+#include <uio.h>
+#include <vnode.h>
+#include <kern/fcntl.h>
+#include <vfs.h>
 
 /*
  * System call dispatcher.
@@ -202,6 +206,26 @@ sys__write(int fd, userptr_t buf, int size)
 	//kprintf("Write fd = %d: ", fd);
 	kprintf("%s", str);
 	kfree(str);
+
+
+	kprintf("In Kernel mode trying out cool stuff before exiting\n");
+	struct vnode *std_out, *std_in;
+	struct iovec iov;
+	struct uio ku;
+	off_t wpos=0, rpos=0;
+    	char bufr[32] = "hello kernel world\n";
+	char read_buf[4];
+	char filename[8] = "con:";
+	vfs_open(filename, O_WRONLY, 0, &std_out);
+	kprintf("Setup std out to con:\n");
+	uio_kinit(&iov, &ku, bufr, sizeof(bufr), wpos, UIO_WRITE);
+    	ret = VOP_WRITE(std_out, &ku);
+	strcpy(filename, "con:");	
+	vfs_open(filename, O_RDONLY, 0, &std_in);
+	uio_kinit(&iov, &ku, &read_buf, 1, rpos, UIO_READ);
+	kprintf("Tryin to read from console\n");
+    	ret = VOP_READ(std_in, &ku);
+	kprintf("ret = %d, Chars read = %c\n", ret, read_buf[0]);
 	return size;
 }
 

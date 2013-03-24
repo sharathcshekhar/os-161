@@ -51,6 +51,7 @@
 #include "opt-synchprobs.h"
 #include "opt-defaultscheduler.h"
 
+#include <process.h>
 
 /* Magic number used as a guard value on kernel thread stacks. */
 #define THREAD_STACK_MAGIC 0xbaadf00d
@@ -153,6 +154,7 @@ thread_create(const char *name)
 	thread->t_cwd = NULL;
 
 	/* If you add to struct thread, be sure to initialize here */
+	thread->process_table = NULL;
 
 	return thread;
 }
@@ -512,6 +514,9 @@ thread_fork(const char *name,
 		VOP_INCREF(curthread->t_cwd);
 		newthread->t_cwd = curthread->t_cwd;
 	}
+
+	/* process related field */
+	newthread->process_table = curthread->process_table;
 
 	/*
 	 * Because new threads come out holding the cpu runqueue lock
