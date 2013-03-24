@@ -4,6 +4,7 @@
 #include <current.h>
 #include <lib.h>
 #include <vfs.h>
+#include <syscall.h>
 
 static int get_pid_index(int pid_map, int bit_len);
 static int set_pid(int index, int offset);
@@ -76,7 +77,7 @@ create_process_table(void)
 	process->process_name = NULL;
 	process->pid = get_pid();
 	process->thread = curthread;
-	process->status = PS_RUN;
+	process->status = PS_CREATE;
 	process->file_table = kmalloc(MAX_FILES_PER_PROCESS * sizeof(struct global_file_hanlder**));
 	
 	/* init the file table */
@@ -87,7 +88,8 @@ create_process_table(void)
 	process->children = NULL;
 	process->father = curthread->process_table;
 	process->exit_code = 0;
-	process->exit_signal = cv_create("exit_signal");
+	process->status_cv = cv_create("status_cv");
+	process->status_lk = lock_create("status_lk");
 	
 	return process;
 }
@@ -133,5 +135,11 @@ int open_std_streams(struct global_file_handler **file_table)
 	file_table[2]->open_flags = O_WRONLY;
 	file_table[2]->flock = lock_create("file_handler_lk");
 	
+	return 0;
+}
+
+int sys_getpid(int *pid)
+{
+	*pid = curthread->process_table->pid;
 	return 0;
 }

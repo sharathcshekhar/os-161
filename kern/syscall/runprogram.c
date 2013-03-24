@@ -97,6 +97,8 @@ runprogram(char *progname)
 	}
 	
 	curthread->process_table = create_process_table();
+	/* This is the first user space process, if it is here, it's alreay running */
+	curthread->process_table->status = PS_RUN;
 	KASSERT(curthread->process_table != NULL);
 	result = open_std_streams(curthread->process_table->file_table);
 	curthread->process_table->open_file_count += 3;	

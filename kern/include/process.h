@@ -19,8 +19,10 @@ extern int pid_count;
 
 /* States a process can be in */
 typedef enum {
+	PS_CREATE,	/* process is being created */
+	PS_FAIL,	/* fork() has failed */
 	PS_RUN,		/* running */
-	PS_WAIT,		/* waiting for child */
+	PS_WAIT,	/* waiting for child */
 	PS_ZSTOP,	/* Zombied by stop, waiting to be restarted/collected */
 	PS_ZTERM,	/* Zombied, terminated, waiting to be collected */
 } process_state_t;
@@ -37,7 +39,8 @@ struct process_struct {
 	struct process_struct *father;
 	/* Should use encoding used in wait.h */
 	int exit_code;
-	struct cv *exit_signal;
+	struct cv *status_cv;
+	struct lock *status_lk;
 	/*
 	 * Scheduler realated variables
 	 */

@@ -9,18 +9,8 @@
 #include <lib.h>
 #include <addrspace.h>
 
-enum fork_status_t {
-	E_CHILD_PROGRESS = 0,
-	E_CHILD_SUCCESS,
-	E_CHILD_FAILED,
-};
-
 static void 
 create_user_process(void *args, unsigned long data);
-
-struct lock *fork_status_lk;
-struct cv *fork_status_cv;
-enum fork_status_t fork_status = 0;
 
 struct fork_args {
 	struct trapframe *tf;
@@ -44,9 +34,6 @@ int sys_fork(struct trapframe *tf, int *child_pid)
 		return 1;
 	}
 	
-	fork_status_lk = lock_create("fork_lk");
-	fork_status_cv = cv_create("fork_cv");
-	
 	args->as = as_create();
 	args->ps_table = create_process_table();
 	args->tf = tf;
@@ -57,19 +44,19 @@ int sys_fork(struct trapframe *tf, int *child_pid)
 			(void*)args /* thread arg */, 1 /* thread arg */,
 			NULL);
 	
-	lock_acquire(fork_status_lk);
-	if (fork_status == E_CHILD_PROGRESS) {
+	lock_acquire(args->ps_table->status_lk);
+	if (args->ps_table->status == PS_CREATE) {
 		/* Child is being created, wait */
-		cv_wait(fork_status_cv, fork_status_lk);
+		cv_wait(args->ps_table->status_cv, args->ps_table->status_lk);
 	}
-	lock_release(fork_status_lk);
+	lock_release(args->ps_table->status_lk);
 	
 	/*
 	 * if child_pid is -1, clean-up stuff and go back
 	 * else return the pid to the user
 	 */
 	
-	if (fork_status == E_CHILD_FAILED) {
+	if (args->ps_table->status == PS_FAIL) {
 		/* handle failures */
 		*child_pid = -1;
 		ret = 1;
@@ -99,8 +86,6 @@ int sys_fork(struct trapframe *tf, int *child_pid)
 	ret = 0;
 
 clean_exit:	
-	lock_destroy(fork_status_lk);
-	cv_destroy(fork_status_cv);
 	kfree(args);
 	return ret;
 }
@@ -136,12 +121,12 @@ create_user_process(void *args, unsigned long data)
 	/* Invalidate everything in the TLB */	
 	as_activate(curthread->t_addrspace);
 	
-	lock_acquire(fork_status_lk);
+	lock_acquire(process_table->status_lk);
 	/* Add error checks and indicate success only if really successful :) */
-	fork_status = E_CHILD_SUCCESS;
+	process_table->status = PS_RUN;
 	/* After waking the parent, he can go back to user mode and start executing */
-	cv_signal(fork_status_cv, fork_status_lk);
-	lock_release(fork_status_lk);
+	cv_signal(process_table->status_cv, process_table->status_lk);
+	lock_release(process_table->status_lk);
 
 	/* Increment the program counter for the child */
 	child_tf.tf_epc += 4;
