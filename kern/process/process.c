@@ -7,8 +7,9 @@
 
 static int get_pid_index(int pid_map, int bit_len);
 static int set_pid(int index, int offset);
-
+struct thread;
 uint32_t pid_map[MAX_PID/(sizeof(int) * 8)];
+
 int pid_count = 0;
 
 void clear_pid(int pid)
@@ -70,11 +71,17 @@ struct process_struct*
 create_process_table(void)
 {
 	struct process_struct *process;
+	int i;
 	process = kmalloc(sizeof(struct process_struct));
 	process->pid = get_pid();
-//	process->thread = curthread;
+	process->thread = curthread;
 	process->status = PS_RUN;
 	process->file_table = kmalloc(MAX_FILES_PER_PROCESS * sizeof(struct global_file_hanlder**));
+	
+	/* init the file table */
+	for (i = 0; i < MAX_FILES_PER_PROCESS; i++) {
+		process->file_table[i] = NULL;
+	}
 	process->open_file_count = 0;
 	process->children = NULL;
 	process->father = curthread->process_table;
@@ -98,6 +105,9 @@ int open_std_streams(struct global_file_handler **file_table)
 	KASSERT(ret == 0);
 	file_table[0] = kmalloc(sizeof(struct global_file_handler));
 	file_table[0]->vnode = std_in;
+	file_table[0]->offset = 0;
+	file_table[0]->open_count++;
+	file_table[0]->open_flags = O_RDONLY;
 	
 	/* Open STDOUT */
 	strcpy(console, "con:");
@@ -105,6 +115,9 @@ int open_std_streams(struct global_file_handler **file_table)
 	KASSERT(ret == 0);
 	file_table[1] = kmalloc(sizeof(struct global_file_handler));
 	file_table[1]->vnode = std_out;
+	file_table[1]->offset = 0;
+	file_table[1]->open_count++;
+	file_table[1]->open_flags = O_WRONLY;
 	
 	/* Open STDERR */
 	strcpy(console, "con:");
@@ -112,6 +125,9 @@ int open_std_streams(struct global_file_handler **file_table)
 	KASSERT(ret == 0);
 	file_table[2] = kmalloc(sizeof(struct global_file_handler));
 	file_table[2]->vnode = std_err;
+	file_table[2]->offset = 0;
+	file_table[2]->open_count++;
+	file_table[2]->open_flags = O_WRONLY;
 	
 	return 0;
 }

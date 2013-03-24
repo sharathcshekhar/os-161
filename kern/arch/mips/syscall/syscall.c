@@ -137,6 +137,8 @@ syscall(struct trapframe *tf)
 		break;
 		*/
 		/* Add stuff here */
+		case SYS_fork:
+			err = sys_fork(tf, &retval);
  
 	    default:
 		kprintf("Unknown syscall %d\n", callno);
@@ -198,17 +200,25 @@ sys__write(int fd, userptr_t buf, int size)
 	int ret;
 	/* supress warning */
 	(void) fd;
+	/*kprintf("Write fd = %d: ", fd);
+	kprintf("%s", str);
+	kfree(str);
+	*/
 	str = kmalloc(size+1);
 	KASSERT(str);
 	ret = copyin(buf, str, size);
 	KASSERT(ret == 0);
-	str[size] = '\0';
-	//kprintf("Write fd = %d: ", fd);
-	kprintf("%s", str);
-	kfree(str);
+	//str[size] = '\0';
+	struct iovec iov;
+	struct uio ku;
+	uio_kinit(&iov, &ku, str, size, 0, UIO_WRITE);
+    ret = VOP_WRITE(curthread->process_table->file_table[1]->vnode, &ku);
+	return size;
+}
 
+#if 0
 
-	kprintf("In Kernel mode trying out cool stuff before exiting\n");
+	/*	kprintf("In Kernel mode trying out cool stuff before exiting\n");
 	struct vnode *std_out, *std_in;
 	struct iovec iov;
 	struct uio ku;
@@ -226,10 +236,8 @@ sys__write(int fd, userptr_t buf, int size)
 	kprintf("Tryin to read from console\n");
     	ret = VOP_READ(std_in, &ku);
 	kprintf("ret = %d, Chars read = %c\n", ret, read_buf[0]);
-	return size;
-}
+	*/
 
-#if 0
 /*
  * This should be replaced with a full fledged read 
  * and placed in a separate file

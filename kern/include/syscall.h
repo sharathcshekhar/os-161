@@ -57,5 +57,5 @@ void enter_new_process(int argc, userptr_t argv, vaddr_t stackptr,
 
 int sys_reboot(int code);
 int sys___time(userptr_t user_seconds, userptr_t user_nanoseconds);
-
+int sys_fork(struct trapframe *tf, int *retval);
 #endif /* _SYSCALL_H_ */

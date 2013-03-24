@@ -325,6 +325,7 @@ file      thread/thread.c
 file      thread/threadlist.c
 
 file      process/process.c
+file      process/fork.c
 
 #
 # Virtual memory system

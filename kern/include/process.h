@@ -4,6 +4,7 @@
 #include <file.h>
 #include <types.h>
 #include <synch.h>
+#include <thread.h>
 
 #define MAX_PID 1024
 
@@ -12,8 +13,6 @@ void clear_pid(int pid);
 void pid_init(void);
 struct process_struct* create_process_table(void);
 int open_std_streams(struct global_file_handler **file_table);
-
-struct thread;
 
 extern uint32_t pid_map[MAX_PID/(sizeof(int) * 8)];
 extern int pid_count;
