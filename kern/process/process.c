@@ -43,7 +43,7 @@ int get_pid(void)
 
 static int set_pid(int index, int offset)
 {
-   	pid_map[index] &= (1 << offset);
+   	pid_map[index] |= (1 << offset);
 	pid_count++;
 	return ((index * 32) + offset);
 }
@@ -73,6 +73,7 @@ create_process_table(void)
 	struct process_struct *process;
 	int i;
 	process = kmalloc(sizeof(struct process_struct));
+	process->process_name = NULL;
 	process->pid = get_pid();
 	process->thread = curthread;
 	process->status = PS_RUN;
@@ -108,6 +109,7 @@ int open_std_streams(struct global_file_handler **file_table)
 	file_table[0]->offset = 0;
 	file_table[0]->open_count++;
 	file_table[0]->open_flags = O_RDONLY;
+	file_table[0]->flock = lock_create("file_handler_lk");
 	
 	/* Open STDOUT */
 	strcpy(console, "con:");
@@ -118,6 +120,7 @@ int open_std_streams(struct global_file_handler **file_table)
 	file_table[1]->offset = 0;
 	file_table[1]->open_count++;
 	file_table[1]->open_flags = O_WRONLY;
+	file_table[1]->flock = lock_create("file_handler_lk");
 	
 	/* Open STDERR */
 	strcpy(console, "con:");
@@ -128,6 +131,7 @@ int open_std_streams(struct global_file_handler **file_table)
 	file_table[2]->offset = 0;
 	file_table[2]->open_count++;
 	file_table[2]->open_flags = O_WRONLY;
+	file_table[2]->flock = lock_create("file_handler_lk");
 	
 	return 0;
 }

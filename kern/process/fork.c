@@ -49,11 +49,12 @@ int sys_fork(struct trapframe *tf, int *child_pid)
 	
 	args->as = as_create();
 	args->ps_table = create_process_table();
+	args->tf = tf;
 	as_copy(curthread->t_addrspace, &args->as);
 	
 	ret = thread_fork(name /* thread name */,
 			create_user_process /* thread function */,
-			(void*)tf /* thread arg */, 1 /* thread arg */,
+			(void*)args /* thread arg */, 1 /* thread arg */,
 			NULL);
 	
 	lock_acquire(fork_status_lk);
@@ -116,6 +117,7 @@ create_user_process(void *args, unsigned long data)
 	/* when returning to user, the trapframe has to be on the thread's stack */
 	struct trapframe child_tf;
 	/* Make a copy of the trapframe and then make modicications */
+	KASSERT(parent_tf != NULL);
 	memcpy((void *)&child_tf, (const void*)parent_tf, sizeof(struct trapframe));
 	
 	/* clone the file table */	
