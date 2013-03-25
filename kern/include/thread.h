@@ -83,6 +83,7 @@ struct thread {
 	void *t_stack;			/* Kernel-level stack */
 	struct switchframe *t_context;	/* Saved register context (on stack) */
 	struct cpu *t_cpu;		/* CPU thread runs on */
+	struct global_filetable_list g_ft; /* Global FileTable List */
 
 	/*
 	 * Interrupt state fields.
