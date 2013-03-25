@@ -153,6 +153,9 @@ thread_create(const char *name)
 	thread->t_cwd = NULL;
 
 	/* If you add to struct thread, be sure to initialize here */
+	thread->g_ft.offset = 0;
+	thread->g_ft.fileVNode = NULL;
+	thread->g_ft.open_count=0;
 
 	return thread;
 }
