@@ -39,7 +39,11 @@ sys_waitpid(pid_t *pid, userptr_t u_status, int options)
 			if (itr->prev == NULL) {
 				/* first node */
 				curthread->process_table->children = itr->next;
-				itr->next->prev = NULL;
+				/* ashamed of so many nested ifs :( */
+				if (itr->next != NULL) {
+					/* the process has more children */	
+					itr->next->prev = NULL;
+				}
 			} else if (itr->next == NULL) {
 				/* last node */
 				itr->prev->next = NULL;
@@ -58,13 +62,13 @@ sys_waitpid(pid_t *pid, userptr_t u_status, int options)
 		return 1;
 	}
 	
-	lock_acquire(child_ps_table->status_lk);
 	/* 
 	 * if the child has exited, return immediately,
 	 * if not, wait for a signal from the child
+	 * PS_ZSTOP not supported 
 	 */
-	if ((child_ps_table->status != PS_ZTERM) ||
-			(child_ps_table->status != PS_ZSTOP)) {
+	lock_acquire(child_ps_table->status_lk);
+	if (child_ps_table->status != PS_ZTERM) {
 		cv_wait(child_ps_table->status_cv, child_ps_table->status_lk);
 	}
 	/* Child has called _exit(), clean up and return */
@@ -104,13 +108,18 @@ sys__exit(int exit_code)
 	 * and has to be protected by a global lock
 	 */
 	lock_acquire(global_ps_table_lk);
-	adopt_grand_children(curthread->process_table->children,
-				curthread->process_table->father);
+	if (curthread->process_table->children != NULL) {
+		adopt_grand_children(curthread->process_table->children,
+					curthread->process_table->father);
+	}
 	lock_release(global_ps_table_lk);
 	
 	/* clean up the file table and associated handlers */
 	for (i = 0; i < MAX_FILES_PER_PROCESS; i++) {
 		fh = curthread->process_table->file_table[i];
+		if (fh == NULL) {
+			continue;
+		}
 		lock_acquire(fh->flock);
 		fh->open_count--;
 		if (fh->open_count == 0) {
@@ -122,6 +131,7 @@ sys__exit(int exit_code)
 			lock_release(fh->flock);
 		}
 	}
+	KASSERT(curthread->process_table->file_table != NULL);
 	kfree(curthread->process_table->file_table);
 		
 	curthread->process_table->exit_code = exit_code;
@@ -140,6 +150,10 @@ sys__exit(int exit_code)
 	 */
 	
 	curthread->process_table->thread = NULL;
+	/* If you don't have a father, nobody gives a rat's ass to your status. Kill! */
+	if (curthread->process_table->father == NULL) {
+		destroy_process_table(curthread->process_table);
+	}
 	thread_exit();
 	/* Rest in Peace */
 }
@@ -149,19 +163,29 @@ static void
 adopt_grand_children(struct child_process_list *children,
 			struct process_struct *new_parent)
 {
+	KASSERT(children != NULL);
 	struct child_process_list *itr = children;
 	/* Update the father for all the children */
 	while (itr != NULL) {
 		itr->child->father = new_parent;
 		itr = itr->next;
 	}
-	/* Append the list of children to the father's existing child list */
-	itr = new_parent->children;
-	while (itr->next != NULL) {
-		itr = itr->next;
+	/*
+	 * Append the list of children to the father's existing child list
+	 *
+	 * If parent is NULL, that mean this is the first process
+	 * the kernel spawned and is owned by the kernel. Nobody will
+	 * ever wait for this process. And after the process is gone,
+	 * nobody will ever wait for it's children either. So the chilren
+	 * will not get adopted
+	 */ 	
+	if (new_parent != NULL) {
+		itr = new_parent->children;
+		while (itr->next != NULL) {
+			itr = itr->next;
+		}
+		itr->next = children;
+		children->prev = itr;
 	}
-	
-	itr->next = children;
-	children->prev = itr;
 	return;
 }

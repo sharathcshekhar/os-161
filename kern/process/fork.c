@@ -20,7 +20,7 @@ struct fork_args {
 
 /*
  * Do most of the work in parent process itself, that way you 
- * don't even have to spawn a thred if there is a failure
+ * don't even have to spawn a thread if there is a failure
  */
 int sys_fork(struct trapframe *tf, int *child_pid)
 {
