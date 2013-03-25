@@ -92,6 +92,8 @@ int sys__write(int fd, userptr_t buf, int size);
 strncpy_fromUser(userptr_t source, char *destination, int len);
 
 int sys__open(userptr_t fileName, int flags, int mode);
+
+int sys__close(int fd);
 /*
  * Enabling getchar()
  */ 
@@ -206,16 +208,20 @@ sys__write(int fd, userptr_t buf, int size)
 	char *str;
 	int ret;
 	/* supress warning */
-	(void) fd;
-	str = kmalloc(size+1);
-	KASSERT(str);
-	ret = copyin(buf, str, size);
-	KASSERT(ret == 0);
-	str[size] = '\0';
-	//kprintf("Write fd = %d: ", fd);
-	kprintf("%s", str);
-	kfree(str);
-	return size;
+	if(fd == 5) {
+		
+		//ret= vfs_wr
+	} else {
+		str = kmalloc(size+1);
+		KASSERT(str);
+		ret = copyin(buf, str, size);
+		KASSERT(ret == 0);
+		str[size] = '\0';
+		//kprintf("Write fd = %d: ", fd);
+		kprintf("%s", str);
+		kfree(str);
+		return size;
+	}
 }
 
 #if 0
@@ -282,10 +288,12 @@ sys__open(userptr_t fileName, int flags, int mode){
 
 	result = vfs_open(fileName, flags, mode, &tempNode);
 
+
 	if(result){
 		return result;
 	}
 	else{
+		curthread->g_ft.fileVNode = tempNode;
 		//assign file descriptor here
 	}
 	return 5;
@@ -310,6 +318,24 @@ strncpy_fromUser(userptr_t source, char *destination, int len){
 		counter++;
 	}
 	return -1;
+}
+
+int
+sys__close(int fd){
+	int result;
+	//pick a lock before decrementing reference counter..
+
+	curthread->g_ft.open_count--;
+	if(curthread->g_ft.open_count == 0){
+		result = vfs_close(curthread->g_ft.fileVNode);
+	}
+
+	if(result){
+		return result;
+	}
+	curthread->g_ft.fileVNode = NULL;
+	curthread->g_ft.offset=0;
+	return 0;
 }
 
 
