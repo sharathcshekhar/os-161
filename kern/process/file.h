@@ -9,7 +9,7 @@
 #define MAX_FILES_PER_PROCESS
 
 struct global_filetable_list {
-	struct vnode;
+	struct vnode *fileVNode;
 	off_t offset;
 	int open_count;
 	int open_flags;
