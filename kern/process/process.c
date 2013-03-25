@@ -6,12 +6,28 @@
 #include <vfs.h>
 #include <syscall.h>
 
+/* forward declaration to avoid cyclic dependency */
+struct thread;
+
+/* Global variables */
+uint32_t pid_map[MAX_PID/(sizeof(int) * 8)];
+struct lock *global_ps_table_lk;
+int pid_count;;
+
+/* local functions */
 static int get_pid_index(int pid_map, int bit_len);
 static int set_pid(int index, int offset);
-struct thread;
-uint32_t pid_map[MAX_PID/(sizeof(int) * 8)];
 
-int pid_count = 0;
+void process_bootstrap(void)
+{
+	uint32_t i; /* to supress compiler warning */
+	pid_count = 0;
+	for (i = 0; i < (MAX_PID/(sizeof(int) * 8)); i++) {
+		pid_map[i] = 0;
+	}
+	global_ps_table_lk = lock_create("global_process_table_lk");
+	return;
+}
 
 void clear_pid(int pid)
 {
@@ -111,6 +127,7 @@ int open_std_streams(struct global_file_handler **file_table)
 	file_table[0]->offset = 0;
 	file_table[0]->open_count++;
 	file_table[0]->open_flags = O_RDONLY;
+	/* Ref counts and locks migh not be required for std io streams */
 	file_table[0]->flock = lock_create("file_handler_lk");
 	
 	/* Open STDOUT */
@@ -138,6 +155,9 @@ int open_std_streams(struct global_file_handler **file_table)
 	return 0;
 }
 
+/*
+ * system call getpid()
+ */ 
 int sys_getpid(int *pid)
 {
 	*pid = curthread->process_table->pid;

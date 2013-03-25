@@ -49,7 +49,7 @@
 #include <test.h>
 #include <version.h>
 #include "autoconf.h"  // for pseudoconfig
-
+#include <process.h> // for process_bootstrap()
 
 /*
  * These two pieces of data are maintained by the makefiles and build system.
@@ -109,6 +109,7 @@ boot(void)
 	thread_bootstrap();
 	hardclock_bootstrap();
 	vfs_bootstrap();
+	process_bootstrap();
 
 	/* Probe and initialize devices. Interrupts should come on. */
 	kprintf("Device probe...\n");

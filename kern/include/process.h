@@ -12,9 +12,11 @@ int get_pid(void);
 void clear_pid(int pid);
 void pid_init(void);
 struct process_struct* create_process_table(void);
+void process_bootstrap(void);
 int open_std_streams(struct global_file_handler **file_table);
 
 extern uint32_t pid_map[MAX_PID/(sizeof(int) * 8)];
+extern struct lock *global_ps_table_lk;
 extern int pid_count;
 
 /* States a process can be in */
