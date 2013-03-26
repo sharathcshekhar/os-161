@@ -40,7 +40,7 @@
 #include <unistd.h>
 #include <err.h>
 
-static char *hargv[2] = { (char *)"hog", NULL };
+//static char *hargv[2] = { (char *)"hog", NULL };
 static char *cargv[3] = { (char *)"cat", (char *)"catfile", NULL };
 
 #define MAXPROCS  6
@@ -82,13 +82,14 @@ waitall(void)
 		}
 	}
 }
-
+/*
 static
 void
 hog(void)
 {
 	spawnv("/testbin/hog", hargv);
 }
+*/
 
 static
 void
@@ -100,9 +101,9 @@ cat(void)
 int
 main()
 {
-	hog();
-	hog();
-	hog();
+//	hog();
+//	hog();
+//	hog();
 	cat();
 
 	waitall();

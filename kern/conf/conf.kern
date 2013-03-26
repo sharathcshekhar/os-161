@@ -327,6 +327,7 @@ file      thread/threadlist.c
 file      process/process.c
 file      process/fork.c
 file      process/wait_exit.c
+file      process/exec.c
 
 #
 # Virtual memory system

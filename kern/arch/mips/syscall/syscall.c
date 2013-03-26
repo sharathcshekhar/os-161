@@ -87,7 +87,9 @@
  * This is used only for logging error messages
  */
 int sys__write(int fd, userptr_t buf, int size);
-/*
+int sys__execv(userptr_t u_prog, userptr_t *u_args);
+
+	/*
  * Enabling getchar()
  */ 
 int sys__read(int fd, userptr_t buf, int size);
@@ -155,7 +157,9 @@ syscall(struct trapframe *tf)
 		case SYS__exit:
 	    	sys__exit(tf->tf_a0);
 			break;
-		
+		case SYS_execv:
+			sys_execv((userptr_t)tf->tf_a0, (userptr_t *)tf->tf_a1, tf);
+			break;
 		default:
 		kprintf("Unknown syscall %d\n", callno);
 		err = ENOSYS;
@@ -212,27 +216,48 @@ enter_forked_process(struct trapframe *tf)
 int 
 sys__write(int fd, userptr_t buf, int size)
 {
-	char *str;
-	int ret;
 	/* supress warning */
 	(void) fd;
-	/*kprintf("Write fd = %d: ", fd);
-	kprintf("%s", str);
-	kfree(str);
-	*/
+	char *str = NULL; 
+	int ret;
+	struct iovec iov;
+	struct uio ku;
 	str = kmalloc(size+1);
 	KASSERT(str);
 	ret = copyin(buf, str, size);
 	KASSERT(ret == 0);
-	//str[size] = '\0';
-	struct iovec iov;
-	struct uio ku;
 	uio_kinit(&iov, &ku, str, size, 0, UIO_WRITE);
     ret = VOP_WRITE(curthread->process_table->file_table[1]->vnode, &ku);
 	return size;
 }
 
 #if 0
+
+int sys__execv(userptr_t u_prog, userptr_t *u_args)
+{
+	char *prog_name = kmalloc(64);
+	size_t len;
+	int ret = 0, i = 0;
+	char *k_args[8];
+   	
+	ret = copyinstr(u_prog, prog_name, 64, &len);
+	kprintf("%s\n", prog_name);
+	if (ret == ENAMETOOLONG) {
+		return 1;
+	}
+	
+	i = 0;
+	while ((u_args[i] != NULL) && (i < 8)) {	
+		k_args[i] = kmalloc(64);
+		copyinstr(*(u_args + i), k_args[i], 64, &len);
+		if (len != 0) 
+			kprintf("%s\n", k_args[i]);
+		i++;
+	}
+	kprintf("End of argv list\n");
+	return 0;
+}
+
 
 	/*	kprintf("In Kernel mode trying out cool stuff before exiting\n");
 	struct vnode *std_out, *std_in;

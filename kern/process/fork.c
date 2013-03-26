@@ -26,6 +26,7 @@ int sys_fork(struct trapframe *tf, int *child_pid)
 {
 	struct fork_args *args = kmalloc(sizeof(struct fork_args));
 	struct child_process_list *child = NULL;
+	/* TODO: name should be same of the parent */
 	char name[] = "O_sweet_child";
 	int ret;
 
