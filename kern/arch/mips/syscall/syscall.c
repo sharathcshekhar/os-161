@@ -35,14 +35,22 @@
 #include <thread.h>
 #include <current.h>
 #include <syscall.h>
+#include <stat.h>
 
 #include <copyinout.h>
 #include <vnode.h>
+//#include <null.h>
+
 
 #define MAX_PATH 512
 #define FILES_PER_PROCESS 32
+#define NO_OF_GLOBAL_FILES 64
 
 
+#include <uio.h>
+#include <vnode.h>
+#include <kern/fcntl.h>
+#include <vfs.h>
 
 /*
  * System call dispatcher.
@@ -87,11 +95,9 @@
  * Adding a quick and dirty write() using kprintf
  * This is used only for logging error messages
  */
-int sys__write(int fd, userptr_t buf, int size);
+int sys_write(int fd, userptr_t buf, int size);
 
-strncpy_fromUser(userptr_t source, char *destination, int len);
-
-int sys__open(userptr_t fileName, int flags, int mode);
+int sys_open(userptr_t fileName, int flags, int mode);
 
 int sys__close(int fd);
 /*
@@ -124,32 +130,49 @@ syscall(struct trapframe *tf)
 	retval = 0;
 
 	switch (callno) {
-	    case SYS_reboot:
+	case SYS_reboot:
 		err = sys_reboot(tf->tf_a0);
 		break;
 
-	    case SYS___time:
+	case SYS___time:
 		err = sys___time((userptr_t)tf->tf_a0,
-				 (userptr_t)tf->tf_a1);
-		break;
-		
-		case SYS_write:
-			err = sys__write(tf->tf_a0, (userptr_t)tf->tf_a1,
-					tf->tf_a2);
+				(userptr_t)tf->tf_a1);
 		break;
 
-		case SYS_open:
-					err = sys__open((userptr_t)tf->tf_a0, tf->tf_a1, tf->tf_a2);
-				break;
+	case SYS_write:
+		err = sys_write(tf->tf_a0, (userptr_t)tf->tf_a1,
+				tf->tf_a2);
+		break;
+
+	case SYS_open:
+		err = sys_open((userptr_t)tf->tf_a0, tf->tf_a1, tf->tf_a2);
+		break;
 		/*
 		case SYS_read:
 			err = sys__read(tf->tf_a0, (userptr_t)tf->tf_a1,
 					tf->tf_a2);
 		break;
-		*/
+		 */
 		/* Add stuff here */
- 
-	    default:
+	case SYS_fork:
+		err = sys_fork(tf, &retval);
+		break;
+
+	case SYS_getpid:
+		err = sys_getpid(&retval);
+		break;
+
+	case SYS_waitpid:
+		retval = tf->tf_a0;
+		err = sys_waitpid(&retval, (userptr_t)tf->tf_a1,
+				tf->tf_a2);
+		break;
+
+	case SYS__exit:
+		sys__exit(tf->tf_a0);
+		break;
+
+	default:
 		kprintf("Unknown syscall %d\n", callno);
 		err = ENOSYS;
 		break;
@@ -170,12 +193,12 @@ syscall(struct trapframe *tf)
 		tf->tf_v0 = retval;
 		tf->tf_a3 = 0;      /* signal no error */
 	}
-	
+
 	/*
 	 * Now, advance the program counter, to avoid restarting
 	 * the syscall over and over again.
 	 */
-	
+
 	tf->tf_epc += 4;
 
 	/* Make sure the syscall code didn't forget to lower spl */
@@ -203,13 +226,59 @@ enter_forked_process(struct trapframe *tf)
  * and placed in a separate file
  */
 int 
-sys__write(int fd, userptr_t buf, int size)
+sys_write(int fd, userptr_t buf, int size)
 {
 	char *str;
-	int ret;
+	int ret, flag;
+	struct uio k_uio;
+	struct iovec k_iov;
+	off_t offset;
+
+
 	/* supress warning */
+	//check if fd passed has a valid entry in the process file table
+	if(curthread->process_table->file_table[fd] == NULL){
+		return EBADF;
+	}
+
+	flag = curthread->process_table->file_table[fd]->open_flags;
+	if((flag & O_WRONLY) || (flag & O_RDWR))
+	{
+		if(fd){
+			offset = curthread->process_table->file_table[fd]->offset;
+			uio_kinit(&k_iov, &k_uio, buf, size, offset, UIO_WRITE);
+			ret = VOP_WRITE(curthread->process_table->file_table[fd]->vnode, &k_uio);
+			if(ret){
+				return ret;
+			}
+			offset += size;
+			// acquire lock
+			lock_acquire(curthread->process_table->file_table[fd]->flock);
+			curthread->process_table->file_table[fd]->offset = offset;
+			lock_release(curthread->process_table->file_table[fd]->flock);
+			return size-k_uio.uio_resid;//need to confirm this
+		}
+		else{
+			/*str = kmalloc(size+1);
+			KASSERT(str);
+			ret = copyin(buf, str, size);
+			KASSERT(ret == 0);*/
+			struct iovec iov;
+			struct uio ku;
+			uio_kinit(&iov, &ku, str, size, 0, UIO_WRITE);
+			ret = VOP_WRITE(curthread->process_table->file_table[1]->vnode, &ku);
+			return size;
+		}
+
+	}
+	else{
+		return -1;
+	}
+
+
+/*
 	if(fd == 5) {
-		
+
 		//ret= vfs_wr
 	} else {
 		str = kmalloc(size+1);
@@ -222,9 +291,39 @@ sys__write(int fd, userptr_t buf, int size)
 		kfree(str);
 		return size;
 	}
+	str = kmalloc(size+1);
+	KASSERT(str);
+	ret = copyin(buf, str, size);
+	KASSERT(ret == 0);
+	struct iovec iov;
+	struct uio ku;
+	uio_kinit(&iov, &ku, str, size, 0, UIO_WRITE);
+	ret = VOP_WRITE(curthread->process_table->file_table[1]->vnode, &ku);
+	return size; */
 }
 
 #if 0
+
+/*	kprintf("In Kernel mode trying out cool stuff before exiting\n");
+	struct vnode *std_out, *std_in;
+	struct iovec iov;
+	struct uio ku;
+	off_t wpos=0, rpos=0;
+    	char bufr[32] = "hello kernel world\n";
+	char read_buf[4];
+	char filename[8] = "con:";
+	vfs_open(filename, O_WRONLY, 0, &std_out);
+	kprintf("Setup std out to con:\n");
+	uio_kinit(&iov, &ku, bufr, sizeof(bufr), wpos, UIO_WRITE);
+    	ret = VOP_WRITE(std_out, &ku);
+	strcpy(filename, "con:");	
+	vfs_open(filename, O_RDONLY, 0, &std_in);
+	uio_kinit(&iov, &ku, &read_buf, 1, rpos, UIO_READ);
+	kprintf("Tryin to read from console\n");
+    	ret = VOP_READ(std_in, &ku);
+	kprintf("ret = %d, Chars read = %c\n", ret, read_buf[0]);
+ */
+
 /*
  * This should be replaced with a full fledged read 
  * and placed in a separate file
@@ -269,55 +368,81 @@ sys__read(int fd, userptr_t buf, int size)
  * 10. Result = 36 then ENOSPC error has occurred
  * 11. Result = 8 then EINVAL error has occurred
  * 12. Result = 32 then EIO error has occurred
-  **********************************************************************/
+ **********************************************************************/
 
 int
-sys__open(userptr_t fileName, int flags, int mode){
+sys_open(userptr_t u_file, int flags, int mode){
 
-	int result, cpResult;
-	char *flName = kalloc(MAX_PATH);
+	int result;
+	off_t offset;
+	int fd,i;
+	char *k_file = kmalloc(MAX_PATH);
+	struct stat *ptr = kmalloc(sizeof(struct stat));
+	size_t *actual = kmalloc(sizeof(*actual));
 
 	struct vnode *tempNode;
-	if(fileName == NULL){
-		return EFAULT;
+
+	if(curthread->process_table->open_file_count > FILES_PER_PROCESS){
+		return EMFILE;
 	}
-	cpResult = strcpy_fromUser(fileName, flName, MAX_PATH);
-	if(cpResult){
-		return cpResult;
+	if(curthread->process_table->file_table[fd]->open_count > NO_OF_GLOBAL_FILES){
+		return ENFILE; //This needs to be checked
 	}
 
-	result = vfs_open(fileName, flags, mode, &tempNode);
+	if(u_file == NULL){
+		return EFAULT;
+	}
+
+	if(!(flags & O_RDONLY) && !(flags & O_WRONLY) && !(flags & O_RDONLY)){
+		return EINVAL;
+	}
+	else{
+		if(!(flags &  O_CREAT) && !(flags & O_CREAT & O_EXCL) &&
+				!(flags & O_TRUNC) && !(flags & O_APPEND)){
+			return EINVAL;
+		}
+	}
+
+	result = copyinstr(u_file, k_file, MAX_PATH, actual);
+
+	if(result){
+		return result;
+	}
+
+	result = vfs_open(k_file, flags, mode, &tempNode);
 
 
 	if(result){
 		return result;
 	}
 	else{
-		curthread->g_ft.fileVNode = tempNode;
 		//assign file descriptor here
-	}
-	return 5;
-}
+		for(i=0;i<FILES_PER_PROCESS;i++){
+			if(curthread->process_table->file_table[i] == NULL){
+				break;
+			}
+		}
+		fd=i;
 
-int
-strncpy_fromUser(userptr_t source, char *destination, int len){
-	int counter=0;
-	int cpyResult;
+		curthread->process_table->file_table[fd]->vnode = tempNode;
 
-	KASSERT(destination!=NULL);
+		curthread->process_table->file_table[fd]->open_count++;
+		curthread->process_table->file_table[fd]->open_flags = flags;
 
-	while(counter <= len) {
-		cpyResult = copyin(source+counter,destination+counter,1);
-		if(cpyResult){
-			return cpyResult;
+		if(flags & O_APPEND){
+			result = VOP_STAT(curthread->process_table->file_table[fd]->vnode, ptr);
+			if(result){
+				return result;
+			}
+			offset = ptr->st_size;
+			curthread->process_table->file_table[fd]->offset = offset;
+		}
+		else{
+			curthread->process_table->file_table[fd]->offset = 0;
 		}
 
-		if((destination[counter] == '\0')){
-			return 0;
-		}
-		counter++;
 	}
-	return -1;
+	return fd;
 }
 
 int
@@ -325,16 +450,17 @@ sys__close(int fd){
 	int result;
 	//pick a lock before decrementing reference counter..
 
-	curthread->g_ft.open_count--;
-	if(curthread->g_ft.open_count == 0){
-		result = vfs_close(curthread->g_ft.fileVNode);
+
+	curthread->process_table->file_table[fd]->open_count--;
+	if(curthread->process_table->file_table[fd]->open_count == 0){
+		vfs_close(curthread->process_table->file_table[fd]->vnode);
 	}
 
 	if(result){
 		return result;
 	}
-	curthread->g_ft.fileVNode = NULL;
-	curthread->g_ft.offset=0;
+	curthread->process_table->file_table[fd]->vnode = NULL;
+	curthread->process_table->file_table[fd]->offset=0;
 	return 0;
 }
 

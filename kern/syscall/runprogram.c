@@ -44,6 +44,7 @@
 #include <vfs.h>
 #include <syscall.h>
 #include <test.h>
+#include <process.h>
 
 /*
  * Load program "progname" and start running it in usermode.
@@ -94,7 +95,14 @@ runprogram(char *progname)
 		/* thread_exit destroys curthread->t_addrspace */
 		return result;
 	}
-
+	
+	curthread->process_table = create_process_table();
+	/* This is the first user space process, if it is here, it's alreay running */
+	curthread->process_table->status = PS_RUN;
+	KASSERT(curthread->process_table != NULL);
+	result = open_std_streams(curthread->process_table->file_table);
+	curthread->process_table->open_file_count += 3;	
+	
 	/* Warp to user mode. */
 	enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,
 			  stackptr, entrypoint);

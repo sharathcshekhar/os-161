@@ -324,6 +324,10 @@ file      thread/synch.c
 file      thread/thread.c
 file      thread/threadlist.c
 
+file      process/process.c
+file      process/fork.c
+file      process/wait_exit.c
+
 #
 # Virtual memory system
 # (you will probably want to add stuff here while doing the VM assignment)

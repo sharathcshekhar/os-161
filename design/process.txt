@@ -1,16 +1,10 @@
-fork():
+Process related system call Interface design
 
-New files: syscall/fork.c:
-Description: Implementation of kernel fork system call: sys_fork():
+#define MAX_USER_PROCESSES 1024
 
-Files to edit:
-In kern/arch/mips/syscall/syscall.c, add a new test case for fork, case 0: and call sys_fork(). 
-No arguments are passed - Just call the function.
-
-New Data Structures:
+Data Structures:
 
 PROCESS TABLE:
-
 The data structure is maintained in the kernel for each process and would have the below parameters:
 
 1. Pointer to the thread_t structure
@@ -24,28 +18,101 @@ FILE TABLE:
 1. This is data structure contains information about the files opened by the process
 2. Each descriptor points to a file structure which has the present offset in the file
 
+GLOBAL FILE TABLE: doubly linked list
 
-PID generation Mechanism:
+Modification to existing Data Structures:
+struct thread new entry to contain the process table
+
+PID generation Mechanism: O(log n) algorithm for allocating PIDs
 1. PIDs are allocated sequentially from 0 to MAX_USER_PROCESSES
-2. NO of processe alive will be tracked by another Global varible, whose access will be synchornized through locks
-3. Whether the PID is in use or not is maintained in bit map. After the PID reaches MAX, search starts from 0 to allocate the lowest PID available
-4. allocated pids are stored in a PID table defined with MAX_USER_PROCESSES
+2. Whether the PID is in use or not is maintained in bit map. Every time a new PID has to be allocated,
+the bitmap is scanned and the lowest PID is allocated to the new process.
+3. When the process exits, the PID is cleared from the bit map()
+
+Algorithms for System calls
+
+1. getpid():
+
+1. return the pid by checking the process table
+
+2. fork():
+
+New files: syscall/fork.c:
+Description: Implementation of kernel fork system call: sys_fork():
+
+Files to edit:
+In kern/arch/mips/syscall/syscall.c, add a new test case for fork, case 0: and call sys_fork(). 
+No arguments are passed - Just call the function.
 
 Algorithm of sys_fork():
 
-1. Find a free pid to allocate to the newly created process
-2. Spawn a kernel thread immediately to handle the new process - call thread_fork() and pass, clone_address_space()
-3. In clone_address_space():
-	1. call as_copy() to create a copy of the existing address space
-	2. Copy the trap frame and signal the parent that it can go back to user space
-	3. Activate the new address space by calling as_activate()
-	4. define the user space stack by calling as_define stack()
-	5. set the entry point same as the current program counter
-	6. set the return value to 0
-	7. enter the user program by calling enter_new_process()
+1. Check if the process cont has exceeded the MAX_USER_PROCESS, if yes, return failure
+2. Find a free pid to allocate to the newly created process
+3. Spawn a kernel thread immediately to handle the new process - call thread_fork() and pass create_new_process()
+// save the trap frame in the parent thread
+4. Wait for a signal from the child thread to return back to user space.
 
-4. Set the return value to the pid of the child process in tf->tf_v0 and return
+5. In create_new_process():
+	1. create a new process in the process table and add that to the thread->process
+	2. Clone file table in the process table, set the PPID, set the child process table for the parent
+	3. Create new address space by calling as_create(), reset the child TLB by calling as_activate()
+	4. call as_copy() to create a copy of the existing address space
+	5. Copy the trap frame
+	6. define the user space stack by calling as_define_stack()
+	7. set the entry point same as (program counter + 4)
+	8. If no errors, set the newly allocated pid in a shared variable and 
+	   signal the parent that it can go back to user space
+	9. set the return value to 0 enter the user program by calling enter_new_process() //call mips_usermode()
+	10. If any errors, set -1 in a shared variable, signal the waiting parent, destroy resources and call thread_exit() 
+	
+6. Set the return value to the pid of the child process in tf->tf_v0 and return
 
 Synchronization:
-1. The parent process should not go back to user mode untill the trapframe has been copied to the child process
-2. The child process should not enter user space untill everything has been copied
+1. The parent process should not go back to user mode until the trapframe has been copied to the child process
+2. The child process should not enter user space until everything has been copied
+
+
+3. execv()
+@args in: char *program_name
+	  char **args
+1. copyin program_name and the entire **args
+2. count the no of args and store it in argc
+3. create a new address space usig as_create followed by as_activate
+4. Open the file and check the executable permissions
+5. Copy old address space thread->t_address_space to a tmp pointer
+5. call load_elf() and load the new address space with the ELF values
+6. on any failure, destory the new address space, and set the address space back to the old as
+8. Push argc and argv to stack, se the trap frame 
+9. return control to usermode
+	  
+@args out: Never returns
+
+4. waitpid():
+
+@args in: int PID - to wait on
+	  int *status - status flag
+	  int options - dummy
+	  
+@args out: PID of the returned process
+		 			
+1. Check if the PID is one of the children by accessing:
+	curthread->process->children which will be a list of child
+if not, return error
+2. Check if the child has already exited by checking it's status
+3. If yes, free the process table entry, file table, PID
+4. If not, wait on the CV of the child process
+5. When signaled, free the process table entries, file table, PID
+
+
+5. _exit()
+@args in: status
+@args out: void
+
+1. Close all open files
+2. Mark the status as Zombie in the process table
+3. Check if it has any children
+4. If yes, assign its PPID as the PID for the children.
+5. Assign all children to its grandfather by modyifying the process table entry
+6. Set the exit code in the process table entry
+7. Send death signal to its CV by calling cv_wakeone()
+8. call thread_exit() 
