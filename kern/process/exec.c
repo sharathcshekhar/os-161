@@ -80,29 +80,58 @@ int sys_execv(userptr_t u_prog, userptr_t *u_argv, struct trapframe *tf)
 	tf->tf_epc = entrypoint;
 	tf->tf_a0 = k_argc;
 	
-	int argv_offset = stackptr - (1 + (4 * (k_argc + 1)));
-	argv_offset = argv_offset - (argv_offset % 4);
+	uint32_t argv_offset;
+	copy_args_to_user(k_argc, k_argv, &stackptr, &argv_offset)
 	
 	tf->tf_a1 = argv_offset;
+#if 0	
 	
-	/*
-	 * Stack pointer starts at USERSTACK - 0x7fffffff and grows downwards
-	 * 
-	 * addr				  		content
-	 * ---------------------------------
-	 * 7fffffff 			- argv[argc - 1] 
-	 * 7ffffffb 			- argv[argc - 2]
-	 * :						:
-	 * :						:
-	 * 7fffffff-4*(argc+1)	- argv[0]
-	 *
-	 * actual strings start from this address 
-	 */
+	uint32_t argv_offset = stackptr - (4 * (k_argc + 1));
+	kprintf("argv points to %p\n", (uint32_t *) argv_offset);
+	argv_offset = argv_offset - (argv_offset % 4);
+	
    	
 	/* Keep it as char* for pointer arithmetic */
 	char *u_args_ptr, *u_args;
 	u_args_ptr = (char *) argv_offset;
 	u_args = u_args_ptr;
+	for (i = 0; i < k_argc; i++) {
+		int arg_len = strlen(k_argv[i]) + 1;
+		int dest_ptr = (int)(u_args - arg_len);
+		//align pointers to word length
+		dest_ptr = dest_ptr - (dest_ptr % 4);
+		
+		ret = copyoutstr((void *)k_argv[i], (void *)dest_ptr, arg_len, &len);
+		KASSERT(ret == 0);
+		ret = copyout((void *) &dest_ptr, (void *) u_args_ptr, 4);
+		KASSERT(ret == 0);
+		kprintf("argv[%d] points to %p\n", i, (uint32_t *)dest_ptr);
+		u_args_ptr += 4;
+		u_args -= len;
+	}
+	
+	int zero_blk = 0;
+	ret = copyout((void *) &(zero_blk), (void *) u_args_ptr, 4);
+#endif	
+	/* stack pointer should point to the top of the stack */	
+	uint32_t allign_sp = (uint32_t) u_args;
+	allign_sp = allign_sp - (allign_sp % 4);
+	kprintf("sp points to %p\n", (uint32_t *)allign_sp);
+	tf->tf_sp = allign_sp;
+	
+	as_destroy(old_as);
+	return 0;
+}
+
+int copy_args_to_user(int k_argc, void** k_argv, void *usr_sp, void **usr_argv)
+{
+	uint32_t argv_offset = stackptr - (4 * (k_argc + 1));
+	kprintf("argv points to %p\n", (uint32_t *) argv_offset);
+	argv_offset = argv_offset - (argv_offset % 4);
+	
+	/* Keep it as char* for pointer arithmetic */
+	char *u_args_ptr, *u_args;
+	u_args_ptr = (char *) argv_offset;
 	
 	for (i = 0; i < k_argc; i++) {
 		int arg_len = strlen(k_argv[i]) + 1;
@@ -114,18 +143,8 @@ int sys_execv(userptr_t u_prog, userptr_t *u_argv, struct trapframe *tf)
 		KASSERT(ret == 0);
 		ret = copyout((void *) &dest_ptr, (void *) u_args_ptr, 4);
 		KASSERT(ret == 0);
+		kprintf("argv[%d] points to %p\n", i, (uint32_t *)dest_ptr);
 		u_args_ptr += 4;
 		u_args -= len;
 	}
-	
-	int zero_blk = 0;
-	ret = copyout((void *) &(zero_blk), (void *) u_args_ptr, 4);
-	
-	/* stack pointer should point to the top of the stack */	
-	int allign_sp = (uint32_t) u_args;
-	allign_sp = allign_sp - (allign_sp % 4);
-	tf->tf_sp = allign_sp;
-	
-	as_destroy(old_as);
-	return 0;
 }
