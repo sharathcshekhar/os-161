@@ -231,28 +231,6 @@ sys__write(int fd, userptr_t buf, int size)
 	return size;
 }
 
-/*
- * This should be replaced with a full fledged open
- * and placed in a separate file
- */
-int 
-sys__write(int fd, userptr_t buf, int size)
-{
-	/* supress warning */
-	(void) fd;
-	char *str = NULL; 
-	int ret;
-	struct iovec iov;
-	struct uio ku;
-	str = kmalloc(size+1);
-	KASSERT(str);
-	ret = copyin(buf, str, size);
-	KASSERT(ret == 0);
-	uio_kinit(&iov, &ku, str, size, 0, UIO_WRITE);
-    ret = VOP_WRITE(curthread->process_table->file_table[1]->vnode, &ku);
-	return size;
-}
-
 #if 0
 
 int sys__execv(userptr_t u_prog, userptr_t *u_args)

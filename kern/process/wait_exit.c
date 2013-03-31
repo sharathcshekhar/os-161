@@ -19,7 +19,7 @@ sys_waitpid(pid_t *pid, userptr_t u_status, int options)
 	struct process_struct *child_ps_table = NULL;
 	int k_status;
 	int ret;
-
+	
 	ret = copyin(u_status, (void*)&k_status, 4);
 	KASSERT(ret == 0);
 	
@@ -62,6 +62,16 @@ sys_waitpid(pid_t *pid, userptr_t u_status, int options)
 		return 1;
 	}
 	
+	k_status = __waitpid(pid, child_ps_table);
+	ret = copyout((void*)&k_status, u_status, 4);
+	/* dont ASSERT, return error if invalid pointer is passed! */
+	KASSERT(ret == 0);
+	return 0;
+}
+
+int __waitpid(pid_t *pid, struct process_struct *child_ps_table)
+{
+	int status;
 	/* 
 	 * if the child has exited, return immediately,
 	 * if not, wait for a signal from the child
@@ -73,12 +83,12 @@ sys_waitpid(pid_t *pid, userptr_t u_status, int options)
 	}
 	/* Child has called _exit(), clean up and return */
 	lock_release(child_ps_table->status_lk);
-	k_status = _MKWVAL(child_ps_table->exit_code) | __WEXITED;
+	status = _MKWVAL(child_ps_table->exit_code) | __WEXITED;
+	
+	/* wild characters for pid not supported */
 	*pid = child_ps_table->pid;
-	ret = copyout((void*)&k_status, u_status, 4);
-	KASSERT(ret == 0);
 	destroy_process_table(child_ps_table);
-	return 0;
+	return status;
 }
 
 static void 
@@ -150,10 +160,7 @@ sys__exit(int exit_code)
 	 */
 	
 	curthread->process_table->thread = NULL;
-	/* If you don't have a father, nobody gives a rat's ass to your status. Kill! */
-	if (curthread->process_table->father == NULL) {
-		destroy_process_table(curthread->process_table);
-	}
+	/* If you don't have a father, the kernel should collect the status code */ 
 	thread_exit();
 	/* Rest in Peace */
 }

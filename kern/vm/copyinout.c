@@ -319,3 +319,31 @@ copyoutstr(const char *src, userptr_t userdest, size_t len, size_t *actual)
 	curthread->t_machdep.tm_badfaultfunc = NULL;
 	return result;
 }
+
+/* Nice function to zero a userspace buffer */
+int copyout_zeros(userptr_t userdest, size_t len)
+{
+	int result;
+	size_t stoplen;
+
+	result = copycheck(userdest, len, &stoplen);
+	if (result) {
+		return result;
+	}
+	if (stoplen != len) {
+		/* Single block, can't legally truncate it. */
+		return EFAULT;
+	}
+
+	curthread->t_machdep.tm_badfaultfunc = copyfail;
+
+	result = setjmp(curthread->t_machdep.tm_copyjmp);
+	if (result) {
+		curthread->t_machdep.tm_badfaultfunc = NULL;
+		return EFAULT;
+	}
+
+	bzero((void *)userdest, len);
+	curthread->t_machdep.tm_badfaultfunc = NULL;
+    return 0;
+}

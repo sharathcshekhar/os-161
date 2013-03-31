@@ -53,8 +53,10 @@
  * Calls vfs_open on progname and thus may destroy it.
  */
 int
-runprogram(char *progname)
+runprogram(char *progname, long nargs, void *arg_ptr, void *ps_table)
 {
+	char **argv = arg_ptr;
+	struct process_struct *child_ps_table = ps_table;
 	struct vnode *v;
 	vaddr_t entrypoint, stackptr;
 	int result;
@@ -96,15 +98,19 @@ runprogram(char *progname)
 		return result;
 	}
 	
-	curthread->process_table = create_process_table();
+	curthread->process_table = child_ps_table;
+	KASSERT(curthread->process_table != NULL);
 	/* This is the first user space process, if it is here, it's alreay running */
 	curthread->process_table->status = PS_RUN;
-	KASSERT(curthread->process_table != NULL);
 	result = open_std_streams(curthread->process_table->file_table);
 	curthread->process_table->open_file_count += 3;	
 	
 	/* Warp to user mode. */
-	enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,
+	//enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,
+	//		  stackptr, entrypoint);
+	uint32_t usr_argv;
+	copyout_args((int)nargs, (void**)argv, &stackptr, &usr_argv);
+	enter_new_process((int)nargs, (userptr_t)usr_argv,
 			  stackptr, entrypoint);
 	
 	/* enter_new_process does not return. */

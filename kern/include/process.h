@@ -14,6 +14,8 @@ void pid_init(void);
 struct process_struct* create_process_table(void);
 void process_bootstrap(void);
 int open_std_streams(struct global_file_handler **file_table);
+int copyout_args(int k_argc, void** k_argv, uint32_t *usr_sp, uint32_t *usr_argv);
+int __waitpid(pid_t *pid, struct process_struct *child_ps_table);
 
 extern uint32_t pid_map[MAX_PID/(sizeof(int) * 8)];
 extern struct lock *global_ps_table_lk;

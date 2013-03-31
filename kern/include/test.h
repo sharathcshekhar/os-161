@@ -105,7 +105,7 @@ int mallocstress(int, char **);
 int nettest(int, char **);
 
 /* Routine for running a user-level program. */
-int runprogram(char *progname);
+int runprogram(char *progname, long nargs, void *ptr, void *ps_table);
 
 /* Kernel menu system. */
 void menu(char *argstr);
@@ -113,5 +113,9 @@ void menu(char *argstr);
 /* The main function, called from start.S. */
 void kmain(char *bootstring);
 
+struct cmd_progthread_args {
+	void *argv_ptr;
+	void *child_ps_table;
+};
 
 #endif /* _TEST_H_ */

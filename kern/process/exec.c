@@ -3,9 +3,7 @@
 #include <mips/trapframe.h>
 #include <thread.h>
 #include <current.h>
-#include <synch.h>
 #include <syscall.h>
-#include <process.h>
 #include <lib.h>
 #include <addrspace.h>
 #include <copyinout.h>
@@ -22,20 +20,22 @@
 /* Max length of each argument */
 #define MAX_ARGV_LEN 64
 
+#define ALIGN_PTR_TO_4BYTES(ptr)	((ptr) = ((ptr) - ((ptr) % 4)))
+
 int sys_execv(userptr_t u_prog, userptr_t *u_argv, struct trapframe *tf)
 {
 	char *k_progname = kmalloc(MAX_PROGRAM_NAME);
-	size_t len;
-	int ret = 0, k_argc = 0;
-	char *k_argv[MAX_ARGC]; //+1 for the NULL terminator
+	char *k_argv[MAX_ARGC + 1]; /* +1 for the NULL terminator */
 	struct vnode *v;
-	vaddr_t entrypoint, stackptr;
    	struct addrspace *old_as = NULL;
-	int i = 0;
+	vaddr_t entrypoint, stackptr;
+	uint32_t argv_offset;
+	size_t len;
+	int ret = 0, k_argc = 0, i = 0;
 
 	ret = copyinstr(u_prog, k_progname, MAX_PROGRAM_NAME, &len);
 	if (ret == ENAMETOOLONG) {
-		return 1;
+		return ret;
 	}
 	
 	while ((u_argv[k_argc] != NULL) && (i < MAX_ARGC)) {
@@ -48,7 +48,7 @@ int sys_execv(userptr_t u_prog, userptr_t *u_argv, struct trapframe *tf)
 	/* Open the exec file. */
 	ret = vfs_open(k_progname, O_RDONLY, 0, &v);
 	if (ret) {
-		return ret;
+		goto clean_exit;
 	}
 	
 	/* restore in case of error, destory or else */
@@ -67,84 +67,97 @@ int sys_execv(userptr_t u_prog, userptr_t *u_argv, struct trapframe *tf)
 		as_destroy(curthread->t_addrspace);
 		curthread->t_addrspace = old_as;
 		as_activate(curthread->t_addrspace);
-		return ret;
+		goto clean_exit;
 	}
 
 	/* Done with the file now. */
 	vfs_close(v);
-	
 	ret = as_define_stack(curthread->t_addrspace, &stackptr);
+	KASSERT(ret == 0);
 	
+	ret = copyout_args(k_argc, (void**)k_argv, &stackptr, &argv_offset);
+	KASSERT(ret == 0);
+	
+	/* 
+	 * if we have reached this point, everything has gone well and execv 
+	 * has succeedded zero the trapfram, and destory the old address space 
+	 */
 	bzero(tf, sizeof(struct trapframe));	
-	tf->tf_status = CST_IRQMASK | CST_IEp | CST_KUp;
-	tf->tf_epc = entrypoint;
-	tf->tf_a0 = k_argc;
-	
-	uint32_t argv_offset;
-	copy_args_to_user(k_argc, k_argv, &stackptr, &argv_offset)
+	as_destroy(old_as);
 	
 	tf->tf_a1 = argv_offset;
-#if 0	
-	
-	uint32_t argv_offset = stackptr - (4 * (k_argc + 1));
-	kprintf("argv points to %p\n", (uint32_t *) argv_offset);
-	argv_offset = argv_offset - (argv_offset % 4);
-	
-   	
-	/* Keep it as char* for pointer arithmetic */
-	char *u_args_ptr, *u_args;
-	u_args_ptr = (char *) argv_offset;
-	u_args = u_args_ptr;
-	for (i = 0; i < k_argc; i++) {
-		int arg_len = strlen(k_argv[i]) + 1;
-		int dest_ptr = (int)(u_args - arg_len);
-		//align pointers to word length
-		dest_ptr = dest_ptr - (dest_ptr % 4);
-		
-		ret = copyoutstr((void *)k_argv[i], (void *)dest_ptr, arg_len, &len);
-		KASSERT(ret == 0);
-		ret = copyout((void *) &dest_ptr, (void *) u_args_ptr, 4);
-		KASSERT(ret == 0);
-		kprintf("argv[%d] points to %p\n", i, (uint32_t *)dest_ptr);
-		u_args_ptr += 4;
-		u_args -= len;
-	}
-	
-	int zero_blk = 0;
-	ret = copyout((void *) &(zero_blk), (void *) u_args_ptr, 4);
-#endif	
-	/* stack pointer should point to the top of the stack */	
-	uint32_t allign_sp = (uint32_t) u_args;
-	allign_sp = allign_sp - (allign_sp % 4);
-	kprintf("sp points to %p\n", (uint32_t *)allign_sp);
-	tf->tf_sp = allign_sp;
-	
-	as_destroy(old_as);
-	return 0;
+	tf->tf_sp = stackptr;
+	tf->tf_epc = entrypoint;
+	tf->tf_a0 = k_argc;
+	/* I have no idea what the next line of code does! */
+	tf->tf_status = CST_IRQMASK | CST_IEp | CST_KUp;
+	ret = 0;
+
+clean_exit:
+	/* kfree stuff */
+	return ret;
 }
 
-int copy_args_to_user(int k_argc, void** k_argv, void *usr_sp, void **usr_argv)
+/*
+ * copyout_args - use, misuse, and abuse pointer arithmetic,
+ * poetry in motion!
+ *
+ * @args in: 
+ * 	k_argc - argument count
+ * 	k_argv - pointer to an array of arguments
+ * 
+ * @args out:
+ * 	usr_argv - pointer to the array of arguments in user space
+ *
+ * @args in/out:
+ * 	usr_sp - in: Top of the user space stack
+ * 			 out: New value of the stack pointer should point to
+ * 	
+ * 	return:
+ * 		zero 		- on success
+ * 		non-zero	- on failure
+ */ 
+int copyout_args(int k_argc, void** k_argv, uint32_t *usr_sp, uint32_t *usr_argv)
 {
-	uint32_t argv_offset = stackptr - (4 * (k_argc + 1));
-	kprintf("argv points to %p\n", (uint32_t *) argv_offset);
-	argv_offset = argv_offset - (argv_offset % 4);
+	uint32_t arg_len, dest_ptr;
+	char *u_args_ptr; /* Keep it as char* for pointer arithmetic */
+	int zero_blk = 0, i, ret;
 	
-	/* Keep it as char* for pointer arithmetic */
-	char *u_args_ptr, *u_args;
-	u_args_ptr = (char *) argv_offset;
+	KASSERT(k_argv);
+	KASSERT(usr_sp);
+	KASSERT(usr_argv);
+
+	*usr_argv = *usr_sp - (4 * (k_argc + 1));
+	u_args_ptr = (char *)(*usr_argv);
+	dest_ptr = (uint32_t)u_args_ptr;
 	
+	DEBUG(DB_EXEC, "argv points to %p\n", usr_argv);
+
 	for (i = 0; i < k_argc; i++) {
-		int arg_len = strlen(k_argv[i]) + 1;
-		int dest_ptr = (int)(u_args - arg_len);
-		//align pointers to word length
-		dest_ptr = dest_ptr - (dest_ptr % 4);
-		
+		size_t len;
+		arg_len = strlen(k_argv[i]) + 1;
+		dest_ptr -= arg_len;
+		/* align pointers to word length */
+		ALIGN_PTR_TO_4BYTES(dest_ptr);
 		ret = copyoutstr((void *)k_argv[i], (void *)dest_ptr, arg_len, &len);
-		KASSERT(ret == 0);
+		if (ret != 0) {
+			return ret;
+		}
 		ret = copyout((void *) &dest_ptr, (void *) u_args_ptr, 4);
-		KASSERT(ret == 0);
-		kprintf("argv[%d] points to %p\n", i, (uint32_t *)dest_ptr);
+		if (ret != 0) {
+			return ret;
+		}
+		DEBUG(DB_EXEC, "argv[%d] points to %p\n", i, (uint32_t *)dest_ptr);
 		u_args_ptr += 4;
-		u_args -= len;
 	}
+
+	ret = copyout((void *) &(zero_blk), (void *) u_args_ptr, 4);
+	//ret = copyout_zeros((usrptr_t)u_args_ptr, 4)
+	if (ret != 0) {
+		return ret;
+	}
+	/* stack pointer should point to the top of the stack */
+	*usr_sp = dest_ptr;
+	DEBUG(DB_EXEC, "sp points to %p\n", (uint32_t *)usr_sp);
+	return 0;
 }

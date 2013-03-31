@@ -43,6 +43,7 @@
 #include "opt-synchprobs.h"
 #include "opt-sfs.h"
 #include "opt-net.h"
+#include <process.h>
 
 /*
  * In-kernel menu and command dispatcher.
@@ -85,22 +86,25 @@ static
 void
 cmd_progthread(void *ptr, unsigned long nargs)
 {
-	char **args = ptr;
+//	char **args = ptr;
+	struct cmd_progthread_args *thread_args = ptr;
 	char progname[128];
 	int result;
-
 	KASSERT(nargs >= 1);
-
-	if (nargs > 2) {
-		kprintf("Warning: argument passing from menu not supported\n");
-	}
-
+	void *argv = kmalloc(512);
+	memcpy(argv, thread_args->argv_ptr, 512);
+	
+	char **args = argv;
 	/* Hope we fit. */
 	KASSERT(strlen(args[0]) < sizeof(progname));
 
 	strcpy(progname, args[0]);
 
-	result = runprogram(progname);
+	if (nargs > 2) {
+		kprintf("Warning: argument passing from menu not supported\n");
+	}
+
+	result = runprogram(progname, nargs, argv, thread_args->child_ps_table);
 	if (result) {
 		kprintf("Running program %s failed: %s\n", args[0],
 			strerror(result));
@@ -127,21 +131,28 @@ int
 common_prog(int nargs, char **args)
 {
 	int result;
+	struct cmd_progthread_args *thread_args = kmalloc(sizeof(struct cmd_progthread_args));
 
 #if OPT_SYNCHPROBS
 	kprintf("Warning: this probably won't work with a "
 		"synchronization-problems kernel.\n");
 #endif
 
+	struct process_struct *child_ps_table = create_process_table();
+	
+	thread_args->child_ps_table = (void*)child_ps_table; 
+	thread_args->argv_ptr = args;
 	result = thread_fork(args[0] /* thread name */,
 			cmd_progthread /* thread function */,
-			args /* thread arg */, nargs /* thread arg */,
+			thread_args /* thread arg */, nargs /* thread arg */,
 			NULL);
 	if (result) {
 		kprintf("thread_fork failed: %s\n", strerror(result));
 		return result;
 	}
-
+	int pid, status;
+	pid = child_ps_table->pid;
+	status = __waitpid(&pid, child_ps_table);
 	return 0;
 }
 
