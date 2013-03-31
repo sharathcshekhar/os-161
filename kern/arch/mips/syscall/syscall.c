@@ -132,14 +132,7 @@ syscall(struct trapframe *tf)
 			err = sys__write(tf->tf_a0, (userptr_t)tf->tf_a1,
 					tf->tf_a2);
 		break;
-		
-		/*
-		case SYS_read:
-			err = sys__read(tf->tf_a0, (userptr_t)tf->tf_a1,
-					tf->tf_a2);
-		break;
-		*/
-		/* Add stuff here */
+	
 		case SYS_fork:
 			err = sys_fork(tf, &retval);
 			break; 
@@ -157,9 +150,11 @@ syscall(struct trapframe *tf)
 		case SYS__exit:
 	    	sys__exit(tf->tf_a0);
 			break;
+		
 		case SYS_execv:
 			sys_execv((userptr_t)tf->tf_a0, (userptr_t *)tf->tf_a1, tf);
 			break;
+		
 		default:
 		kprintf("Unknown syscall %d\n", callno);
 		err = ENOSYS;
@@ -231,75 +226,3 @@ sys__write(int fd, userptr_t buf, int size)
 	return size;
 }
 
-#if 0
-
-int sys__execv(userptr_t u_prog, userptr_t *u_args)
-{
-	char *prog_name = kmalloc(64);
-	size_t len;
-	int ret = 0, i = 0;
-	char *k_args[8];
-   	
-	ret = copyinstr(u_prog, prog_name, 64, &len);
-	kprintf("%s\n", prog_name);
-	if (ret == ENAMETOOLONG) {
-		return 1;
-	}
-	
-	i = 0;
-	while ((u_args[i] != NULL) && (i < 8)) {	
-		k_args[i] = kmalloc(64);
-		copyinstr(*(u_args + i), k_args[i], 64, &len);
-		if (len != 0) 
-			kprintf("%s\n", k_args[i]);
-		i++;
-	}
-	kprintf("End of argv list\n");
-	return 0;
-}
-
-
-	/*	kprintf("In Kernel mode trying out cool stuff before exiting\n");
-	struct vnode *std_out, *std_in;
-	struct iovec iov;
-	struct uio ku;
-	off_t wpos=0, rpos=0;
-    	char bufr[32] = "hello kernel world\n";
-	char read_buf[4];
-	char filename[8] = "con:";
-	vfs_open(filename, O_WRONLY, 0, &std_out);
-	kprintf("Setup std out to con:\n");
-	uio_kinit(&iov, &ku, bufr, sizeof(bufr), wpos, UIO_WRITE);
-    	ret = VOP_WRITE(std_out, &ku);
-	strcpy(filename, "con:");	
-	vfs_open(filename, O_RDONLY, 0, &std_in);
-	uio_kinit(&iov, &ku, &read_buf, 1, rpos, UIO_READ);
-	kprintf("Tryin to read from console\n");
-    	ret = VOP_READ(std_in, &ku);
-	kprintf("ret = %d, Chars read = %c\n", ret, read_buf[0]);
-	*/
-
-/*
- * This should be replaced with a full fledged read 
- * and placed in a separate file
- * Reads 1 character at a time from the stdin
- */
-int 
-sys__read(int fd, userptr_t buf, int size)
-{
-	/* supress warning */
-	(void) fd;
-	/*only getchar() sould work, panic if not*/
-	KASSERT(size == 1);
-	int ret;
-	char ch;
-	//kprintf("Read fd = %d: ", fd);
-	kgets(&ch, 1);
-	kprintf("Read char = %d\n", ch);
-	ret = copyout(&ch, buf, size);
-	KASSERT(ret == 0);
-	//ch = getch();
-	//kprintf("Read char = %d\n", ch);
-	return 1;
-}
-#endif
