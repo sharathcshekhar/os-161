@@ -41,12 +41,6 @@
 #include <vnode.h>
 //#include <null.h>
 
-
-#define MAX_PATH 512
-#define FILES_PER_PROCESS 32
-#define NO_OF_GLOBAL_FILES 64
-
-
 #include <uio.h>
 #include <vnode.h>
 #include <kern/fcntl.h>
@@ -91,11 +85,11 @@
  * registerized values, with copyin().
  */
 
-int sys_write(int fd, userptr_t buf, int size);
+/*int sys_write(int fd, userptr_t buf, int size);
 
 int sys_open(userptr_t fileName, int flags, int mode);
 
-int sys_close(int fd);
+int sys_close(int fd);*/
 
 void
 syscall(struct trapframe *tf)
@@ -138,6 +132,14 @@ syscall(struct trapframe *tf)
 
 	case SYS_open:
 		err = sys_open((userptr_t)tf->tf_a0, tf->tf_a1, tf->tf_a2);
+		break;
+
+	case SYS_read:
+		err = sys_read(tf->tf_a0, (userptr_t)tf->tf_a1, tf->tf_a2);
+		break;
+
+	case SYS_close:
+		err = sys_close(tf->tf_a0);
 		break;
 	
 	case SYS_fork:
@@ -212,7 +214,8 @@ enter_forked_process(struct trapframe *tf)
  * This should be replaced with a full fledged write 
  * and placed in a separate file
  */
-int 
+
+/*int
 sys_write(int fd, userptr_t buf, int size)
 {
 	char *str;
@@ -221,7 +224,7 @@ sys_write(int fd, userptr_t buf, int size)
 	struct iovec k_iov;
 	off_t offset;
 
-	/* supress warning */
+	 //supress warning
 	//check if fd passed has a valid entry in the process file table
 	if(curthread->process_table->file_table[fd] == NULL){
 		return EBADF;
@@ -258,7 +261,7 @@ sys_write(int fd, userptr_t buf, int size)
 	return size;
 }
 
-/***********************************************************************
+*********************************************************************
  * OPEN (STILL DRAFT)
  * List of errors to Return:
  * 1. If source = NULL, Return EFAULT
@@ -277,7 +280,7 @@ sys_write(int fd, userptr_t buf, int size)
  * 10. Result = 36 then ENOSPC error has occurred
  * 11. Result = 8 then EINVAL error has occurred
  * 12. Result = 32 then EIO error has occurred
- **********************************************************************/
+ ********************************************************************
 
 int
 sys_open(userptr_t u_file, int flags, int mode){
@@ -370,4 +373,4 @@ sys_close(int fd){
 	curthread->process_table->file_table[fd]->vnode = NULL;
 	curthread->process_table->file_table[fd]->offset=0;
 	return 0;
-}
+}*/
