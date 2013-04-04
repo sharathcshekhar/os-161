@@ -50,7 +50,6 @@ void enter_forked_process(struct trapframe *tf);
 void enter_new_process(int argc, userptr_t argv, vaddr_t stackptr,
 		       vaddr_t entrypoint);
 
-
 /*
  * Prototypes for IN-KERNEL entry points for system call implementations.
  */
@@ -62,4 +61,9 @@ int sys_getpid(int *pid);
 int sys_waitpid(pid_t *pid, userptr_t status, int options);
 void sys__exit(int exit_code);
 int sys_execv(userptr_t u_prog, userptr_t *u_argv, struct trapframe *tf);
+
+int sys_write(int fd, userptr_t buf, int size, int *retval);
+int sys_open(userptr_t fileName, int flags, int mode, int *retval);
+int sys_close(int fd);
+
 #endif /* _SYSCALL_H_ */

@@ -20,6 +20,7 @@
 /* Max length of each argument */
 #define MAX_ARGV_LEN 64
 
+/* Bus Error. Take a train. */
 #define ALIGN_PTR_TO_4BYTES(ptr)	((ptr) = ((ptr) - ((ptr) % 4)))
 
 int sys_execv(userptr_t u_prog, userptr_t *u_argv, struct trapframe *tf)
@@ -94,7 +95,11 @@ int sys_execv(userptr_t u_prog, userptr_t *u_argv, struct trapframe *tf)
 	ret = 0;
 
 clean_exit:
-	/* kfree stuff */
+	/* free all the memory allocated for the arguments */
+	kfree(k_progname);
+	for (i = 0; i < (k_argc-1); i++) {
+		kfree(k_argv[i]);
+	}
 	return ret;
 }
 

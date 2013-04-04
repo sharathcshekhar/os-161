@@ -11,8 +11,11 @@ struct thread;
 
 /* Global variables */
 uint32_t pid_map[MAX_PID/(sizeof(int) * 8)];
-struct lock *global_ps_table_lk;
 int pid_count;;
+int global_file_count;;
+struct lock *global_ps_table_lk;
+struct lock *global_pid_lk;
+struct lock *global_file_count_lk;
 
 /* local functions */
 static int get_pid_index(int pid_map, int bit_len);
@@ -26,6 +29,8 @@ void process_bootstrap(void)
 		pid_map[i] = 0;
 	}
 	global_ps_table_lk = lock_create("global_process_table_lk");
+	global_pid_lk = lock_create("global_pid_lk");
+	global_file_count_lk = lock_create("global_file_count_lk");
 	return;
 }
 
@@ -34,8 +39,10 @@ void clear_pid(int pid)
 	int index = pid/32;
 	int bit_offset = pid % 32;
 	int mask = 1 << bit_offset;
+	lock_acquire(global_pid_lk);
 	pid_map[index] &= (~mask);
 	pid_count--;
+	lock_release(global_pid_lk);
 }
 
 int get_pid(void) 
@@ -44,7 +51,9 @@ int get_pid(void)
 	int i;
 	int pid;
 	
+	lock_acquire(global_pid_lk);
 	if (pid_count == (MAX_PID-1)) {
+		lock_release(global_pid_lk);
 		return -1;
 	}
 	
@@ -52,9 +61,11 @@ int get_pid(void)
 		if (pid_map[i] != 0xffffffff) {
 			offset = get_pid_index(pid_map[i], 32);
 			pid = set_pid(i, offset);
+			lock_release(global_pid_lk);
 			return pid;
 		}
 	}
+	lock_release(global_pid_lk);
 	return -1;
 }
 

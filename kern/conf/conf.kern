@@ -328,6 +328,8 @@ file      process/process.c
 file      process/fork.c
 file      process/wait_exit.c
 file      process/exec.c
+file      syscall/file.c
+file      process/file_io.h
 
 #
 # Virtual memory system
