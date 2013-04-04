@@ -6,6 +6,8 @@
 #include <synch.h>
 
 #define MAX_FILES_PER_PROCESS 32
+#define NO_OF_GLOBAL_FILES 64
+#define MAX_PATH 512
 
 struct global_file_handler {
 	struct vnode *vnode;
