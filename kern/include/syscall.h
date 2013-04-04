@@ -63,11 +63,11 @@ int sys_waitpid(pid_t *pid, userptr_t status, int options);
 void sys__exit(int exit_code);
 int sys_execv(userptr_t u_prog, userptr_t *u_argv, struct trapframe *tf);
 
-int sys_write(int fd, userptr_t buf, int size);
+int sys_write(int fd, userptr_t buf, int size, int *bytes_write);
 
-int sys_open(userptr_t fileName, int flags, int mode);
+int sys_open(userptr_t u_file, int flags, int mode, int *fileDescriptor);
 
-int sys_read(int fd, void *buf, int size);
+int sys_read(int fd, void *buf, int size, int *bytes_read);
 
 int sys_close(int fd);
 #endif /* _SYSCALL_H_ */
