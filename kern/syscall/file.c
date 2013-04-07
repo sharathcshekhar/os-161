@@ -1,39 +1,66 @@
 #include <kern/seek.h>
+#include <kern/errno.h>
+#include <file.h>
 #include <syscall.h>
+#include <stat.h>
+#include <thread.h>
+#include <current.h>
+#include <types.h>
+#include <lib.h>
+#include <kern/fcntl.h>
+#include <copyinout.h>
+#include <vnode.h>
+#include <vnode.h>
+#include <vfs.h>
+#include <uio.h>
 
 int
-sys_lseek(int fd, off_t pos, int whence, off_t *new_pos)
+sys_lseek(int fd, off_t pos, userptr_t whence_ptr, off_t *new_pos)
 {
-	struct stat *ptr = NULL;
-	int result;
+	struct stat file_stat;
+	int ret;
+	int k_whence;
+	
+	ret = copyin(whence_ptr, (void*)&k_whence, sizeof(int));
+	if (ret != 0) {
+		return ret;
+	}
+	/* How to implement ESPIPE - lseek on object that does not support seek? */
+	if (fd < 0 || fd > MAX_FILES_PER_PROCESS) {
+		return EBADF;
+	}
+	if (curthread->process_table->file_table[fd] == NULL) {
+		return EBADF;
+	}
+	
 	/*
 	 * You can seek beyond EOF
 	 * Not sure if VFS will take care of this
 	 */
-	switch (whence) {
+	switch (k_whence) {
 		case SEEK_SET:
 			*new_pos = pos;
 			break;
 		case SEEK_CUR:
-			*new_pos = curthread->ps_table->file_table[fd]->offset + pos;
+			*new_pos = curthread->process_table->file_table[fd]->offset + pos;
 			break;
 		case SEEK_END:
-			ptr = kmalloc(sizeof(struct stat));
-			result = VOP_STAT(curthread->process_table->file_table[fd]->vnode, ptr);
-			KASSERT(result == 0);
-			*new_pos = ptr->st_size + pos;
-			kfree(ptr);
+			ret = VOP_STAT(curthread->process_table->file_table[fd]->vnode, &file_stat);
+			KASSERT(ret == 0);
+			*new_pos = file_stat.st_size + pos;
 			break;
 		default:
-			return -1:
+			/* whence invalid */
+			return EINVAL;
 	}	
 	
 	if (*new_pos < 0) {
-		return -1;
+		/* Resulting seek position would be negative */
+		return EINVAL;
 	}
-	lock_acquire(curthread->ps_table_file_table[fd]->flock);
-	curthread->ps_table->file_table[fd]->offset = *new_pos;
-	lock_release(curthread->ps_table_file_table[fd]->flock);
+	lock_acquire(curthread->process_table->file_table[fd]->flock);
+	curthread->process_table->file_table[fd]->offset = *new_pos;
+	lock_release(curthread->process_table->file_table[fd]->flock);
 	
 	return 0;
 }
@@ -41,35 +68,77 @@ sys_lseek(int fd, off_t pos, int whence, off_t *new_pos)
 int
 sys_chdir(userptr_t pathname)
 {
-	int result;
+	int ret = 0;
 	char *k_path = kmalloc(MAX_PATH);
 	size_t len;
-	result = copyinstr(pathname, k_path, MAX_PATH, len);
-	vfs_chdir(k_path);
+	KASSERT(k_path);
+	
+	ret = copyinstr(pathname, k_path, MAX_PATH, &len);
+	if (ret != 0) {
+		/* EFAULT, ENAMETOOLONG */
+		kfree(k_path);
+		return ret;
+	}
+	/* can return ENONET, ENOTDIR, EIO, ENODEV */
+	ret = vfs_chdir(k_path);
+
 	kfree(k_path);
-	return 0;
+	return ret;
 }
 
 int
-sys___getcwd(userptr_t buf, size_t *buflen)
+sys___getcwd(userptr_t usr_buf, size_t buflen, int32_t *actual_len)
 {
 	int ret;
 	struct uio k_uio;
 	struct iovec k_iov;
-	uio_kinit(&k_iov, &k_uio, *buflen, MAX_PATH, 0, UIO_WRITE);
-	ret = vfs_getcwd(struct uio *k_uio);
-	*buflen = k_uio.uio_resid;
+	*actual_len = 0;
+
+	uio_kinit(&k_iov, &k_uio, usr_buf, buflen, 0, UIO_READ);
+	ret = vfs_getcwd(&k_uio);
+	if (ret != 0) {
+		/* EIO, EFAULT, ENOENT */
+		return ret;
+	}
+	*actual_len = buflen - k_uio.uio_resid;
 	return 0;
 }
 
 int
-sys_dup2(int oldfd, int newfd)
+sys_dup2(int oldfd, int newfd, int *fd_ret)
 {
-	if (curthread->ps_table->file_table[newfd] != NULL) {
-		/* close this guy, need an implementation __close() */
+	if (oldfd < 0 || oldfd > MAX_FILES_PER_PROCESS) {
+		return EBADF;
 	}
-	curthread->ps_table->file_table[newfd] =
-			curthread->ps_table->file_table[oldfd];
-	curthread->ps_table->file_table[oldfd]->open_count++;
-	retunr 0;
+	
+	if (curthread->process_table->file_table[oldfd] == NULL) {
+		return EBADF;
+	}
+	
+	if (newfd < 0 || newfd > MAX_FILES_PER_PROCESS) {
+		return EBADF;
+	}
+	
+	if (curthread->process_table->file_table[newfd] != NULL) {
+		/* TODO replace sys_close() with  __close() */
+		sys_close(newfd);
+	}
+	
+	if (curthread->process_table->open_file_count == MAX_FILES_PER_PROCESS) {
+		/* redundant, but I didn't design this */
+		return EMFILE;
+	}
+	
+	curthread->process_table->open_file_count++;
+	
+	curthread->process_table->file_table[newfd] =
+			curthread->process_table->file_table[oldfd];
+	
+	lock_acquire(curthread->process_table->file_table[oldfd]->flock);
+	curthread->process_table->file_table[oldfd]->open_count++;
+	lock_release(curthread->process_table->file_table[oldfd]->flock);
+	
+	/* redundant, but I didn't design this */
+	*fd_ret = newfd;
+	return 0;
 }

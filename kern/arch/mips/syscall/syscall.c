@@ -39,7 +39,6 @@
 
 #include <copyinout.h>
 #include <vnode.h>
-//#include <null.h>
 
 #include <uio.h>
 #include <vnode.h>
@@ -91,6 +90,7 @@ syscall(struct trapframe *tf)
 	int callno;
 	int32_t retval;
 	int err;
+	off_t offset, newpos;
 
 	KASSERT(curthread != NULL);
 	KASSERT(curthread->t_curspl == 0);
@@ -151,15 +151,14 @@ syscall(struct trapframe *tf)
 		break;
 
 	case SYS__exit:
-		err = sys__exit(tf->tf_a0);
+		sys__exit(tf->tf_a0);
 		break;
 	
 	case SYS_lseek:
-		off_t offset = tf->tf_a2 << 32;
-		off_t newpos;
+		offset = tf->tf_a2;
+		offset <<= 32;
 		offset |= (tf->tf_a3);
-		int whence = *((int *) (tf->tf_sp + 16));
-		err = sys_lseek(tf->tf_a0, offset, whence, &newpos);
+		err = sys_lseek(tf->tf_a0, offset, (userptr_t) (tf->tf_sp + 16), &newpos);
 		/* 
 		 * For 64 byte return values, values will be stored in v0 and v1
 		 * MIPS is BIG-ENDIAN so, v1 will have lower 4 bytes and 

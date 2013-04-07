@@ -11,3 +11,4 @@ build
 /user/sbin/*/*.depend
 /user/lib/*/*.depend
 *.swp
+*~

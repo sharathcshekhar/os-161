@@ -56,13 +56,20 @@ void enter_new_process(int argc, userptr_t argv, vaddr_t stackptr,
 
 int sys_reboot(int code);
 int sys___time(userptr_t user_seconds, userptr_t user_nanoseconds);
+
 int sys_fork(struct trapframe *tf, int *retval);
 int sys_getpid(int *pid);
 int sys_waitpid(pid_t *pid, userptr_t status, int options);
 void sys__exit(int exit_code);
 int sys_execv(userptr_t u_prog, userptr_t *u_argv, struct trapframe *tf);
-int sys_write(int fd, userptr_t buf, int size, int *bytes_written);
+
 int sys_open(userptr_t u_file, int flags, int mode, int *fd_ret);
+int sys_write(int fd, userptr_t buf, int size, int *bytes_written);
 int sys_read(int fd, void *buf, int size, int *bytes_read);
 int sys_close(int fd);
+int sys_lseek(int fd, off_t pos, userptr_t whence_ptr, off_t *new_pos);
+int sys_chdir(userptr_t pathname);
+int sys___getcwd(userptr_t buf, size_t buflen, int32_t *actual_len);
+int sys_dup2(int oldfd, int newfd, int *fd_ret);
+
 #endif /* _SYSCALL_H_ */

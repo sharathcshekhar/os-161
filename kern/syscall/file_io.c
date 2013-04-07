@@ -51,7 +51,7 @@ sys_open(userptr_t u_file, int flags, int mode, int *fd_ret){
 	char *k_file = kmalloc(MAX_PATH);
 	struct stat file_stat;
 	struct vnode *vnode;
-
+	struct global_file_handler *file_handler = NULL;
 
 	if (curthread->process_table->open_file_count == MAX_FILES_PER_PROCESS) {
 		result = EMFILE;
@@ -90,28 +90,26 @@ sys_open(userptr_t u_file, int flags, int mode, int *fd_ret){
 		}
 	}
 	
-	KASSERT(fd >0);
+	KASSERT(fd > 0);
+	curthread->process_table->file_table[fd] = kmalloc(sizeof(struct global_file_handler));
+	file_handler = curthread->process_table->file_table[fd];
 
-	struct global_file_handler *file_Handler = curthread->process_table->file_table[fd];
+	KASSERT(file_handler);
 
-	file_Handler = kmalloc(sizeof(struct global_file_handler));
-
-	KASSERT(file_Handler);
-
-	file_Handler->vnode = vnode;
-	file_Handler->open_count = 1;
-	file_Handler->open_flags = flags;
-	file_Handler->flock = lock_create("file_handler_lk");
+	file_handler->vnode = vnode;
+	file_handler->open_count = 1;
+	file_handler->open_flags = flags;
+	file_handler->flock = lock_create("file_handler_lk");
 	curthread->process_table->open_file_count++;
 
 	if (flags & O_APPEND) {
-		result = VOP_STAT(file_Handler->vnode, &file_stat);
+		result = VOP_STAT(file_handler->vnode, &file_stat);
 		if (result) {
 			goto end;
 		}
-		file_Handler->offset = file_stat.st_size;
+		file_handler->offset = file_stat.st_size;
 	} else {
-		file_Handler->offset = 0;
+		file_handler->offset = 0;
 	}
 	
 	*fd_ret = fd;
@@ -129,34 +127,34 @@ sys_write(int fd, userptr_t buf, int size, int *bytes_written)
 	struct uio k_uio;
 	struct iovec k_iov;
 	off_t offset;
-	struct global_file_handler *file_Handler = curthread->process_table->file_table[fd];
-
+	struct global_file_handler *file_handler = NULL;
 
 	/* check if fd passed has a valid entry in the process file table */
-
 	if(!(0 < fd) && (fd < MAX_FILES_PER_PROCESS)){
 		return EBADF;
 	}
 
-	if (file_Handler == NULL) {
+	file_handler = curthread->process_table->file_table[fd];
+
+	if (file_handler == NULL) {
 		return EBADF;
 	}
 
-	access_mode = (file_Handler->open_flags) &
+	access_mode = (file_handler->open_flags) &
 					O_ACCMODE;
 	if ((access_mode == O_WRONLY) || (access_mode ==  O_RDWR)) {
-		offset = file_Handler->offset;
+		offset = file_handler->offset;
 		uio_kinit(&k_iov, &k_uio, buf, size, offset, UIO_WRITE);
-		ret = VOP_WRITE(file_Handler->vnode, &k_uio);
+		ret = VOP_WRITE(file_handler->vnode, &k_uio);
 		if (ret) {
 			return ret;
 		}
 		offset += size;
 		/* acquire lock */
-		lock_acquire(file_Handler->flock);
+		lock_acquire(file_handler->flock);
 		/* should this be incremented by size of set to offset? race condition with child/parent? */
-		file_Handler->offset = offset;
-		lock_release(file_Handler->flock);
+		file_handler->offset = offset;
+		lock_release(file_handler->flock);
 		/* 
 		 * right way to get the bytes written? why would you not write
 		 * all the bytes requested anyway? 
@@ -176,66 +174,69 @@ sys_read(int fd, void *buf, int size, int *bytes_read)
 	off_t offset;
 	struct uio k_uio;
 	struct iovec k_iov;
-	struct global_file_handler *file_Handler = curthread->process_table->file_table[fd];
+	struct global_file_handler *file_handler = NULL;
 
 	if(!((0 < fd) && (fd < MAX_FILES_PER_PROCESS) )){
 		return EBADF;
 	}
 
-	if (file_Handler == NULL) {
+	file_handler = curthread->process_table->file_table[fd];
+
+	if (file_handler == NULL) {
 		return EBADF;
 	}
 
-	access_mode = (file_Handler->open_flags) & O_ACCMODE;
+	access_mode = (file_handler->open_flags) & O_ACCMODE;
 	if ((access_mode == O_RDONLY) || (access_mode == O_RDWR)) {
 
-		offset = file_Handler->offset;
+		offset = file_handler->offset;
 		uio_kinit(&k_iov, &k_uio, buf, size, offset, UIO_READ);
-		result = VOP_READ(file_Handler->vnode, &k_uio);
+		result = VOP_READ(file_handler->vnode, &k_uio);
 		if (result) {
 			return result;
 		}
 		offset += size;
 
-		lock_acquire(file_Handler->flock);
+		lock_acquire(file_handler->flock);
 		/* should this be incremented by size of set to offset? race condition with child/parent? */
-		file_Handler->offset = offset;
-		lock_release(file_Handler->flock);
+		file_handler->offset = offset;
+		lock_release(file_handler->flock);
 
 		*bytes_read = size-k_uio.uio_resid;
 		return 0;
-	} else {
-		return -1;
-	}
+	} 
+	return -1;
 }
 
 int
 sys_close(int fd)
 {
-	struct global_file_handler *file_Handler = curthread->process_table->file_table[fd];
+	struct global_file_handler *file_handler = NULL;
 
 	if(!((0 < fd) && (fd < MAX_FILES_PER_PROCESS))){
 			return EBADF;
 	}
 
-	if(file_Handler == NULL){
+	file_handler = curthread->process_table->file_table[fd];
+
+	if(file_handler == NULL){
 				return EBADF;
 	}
 	
-	KASSERT(file_Handler->open_count > 0);
+	KASSERT(file_handler->open_count > 0);
 
 	/* pick a lock before decrementing reference counter */
-	lock_acquire(file_Handler->flock);
-	file_Handler->open_count--;
-	lock_release(file_Handler->flock);
+	lock_acquire(file_handler->flock);
+	file_handler->open_count--;
+	lock_release(file_handler->flock);
 	
 
 	curthread->process_table->open_file_count--;
-	if (file_Handler->open_count == 0) {
-		vfs_close(file_Handler->vnode);
-		lock_destroy(file_Handler->flock);
-		kfree(file_Handler);
-		file_Handler = NULL;
+	if (file_handler->open_count == 0) {
+		vfs_close(file_handler->vnode);
+		lock_destroy(file_handler->flock);
+		kfree(file_handler);
+		file_handler = NULL;
 
 
 		lock_acquire(global_file_count_lk);
@@ -248,19 +249,19 @@ sys_close(int fd)
 int
 __close(int fd){
 
-	struct global_file_handler *file_Handler = curthread->process_table->file_table[fd];
+	struct global_file_handler *file_handler = curthread->process_table->file_table[fd];
 
-	lock_acquire(file_Handler->flock);
-	file_Handler->open_count--;
-	lock_release(file_Handler->flock);
+	lock_acquire(file_handler->flock);
+	file_handler->open_count--;
+	lock_release(file_handler->flock);
 
 	curthread->process_table->open_file_count--;
 
-	if (file_Handler->open_count == 0) {
-			vfs_close(file_Handler->vnode);
-			lock_destroy(file_Handler->flock);
-			kfree(file_Handler);
-			file_Handler = NULL;
+	if (file_handler->open_count == 0) {
+			vfs_close(file_handler->vnode);
+			lock_destroy(file_handler->flock);
+			kfree(file_handler);
+			file_handler = NULL;
 
 
 			lock_acquire(global_file_count_lk);
