@@ -22,7 +22,7 @@
 #include <vfs.h>
 
 /***********************************************************************
- * OPEN (STILL DRAFT) //TODO: not anymore :)
+ * OPEN
  * List of errors to Return:
  * 1. If source = NULL, Return EFAULT
  * 2. If strncpy_user fails, return -1:
@@ -46,65 +46,80 @@ int
 sys_open(userptr_t u_file, int flags, int mode, int *fd_ret){
 
 	int result;
-	int fd = 0, i;
+	int fd = -1, i;
 	size_t actual;
-	/* TODO: Memory leak! free it before returning */
 	char *k_file = kmalloc(MAX_PATH);
-	struct stat *ptr = kmalloc(sizeof(struct stat));
-
+	struct stat file_stat;
 	struct vnode *vnode;
 
-	if (curthread->process_table->open_file_count == FILES_PER_PROCESS) {
-		return EMFILE;
+
+	if (curthread->process_table->open_file_count == MAX_FILES_PER_PROCESS) {
+		result = EMFILE;
+		goto end;
 	}
 
 	if (((flags & O_ACCMODE) != O_RDONLY) && ((flags & O_ACCMODE) != O_WRONLY) &&
 				((flags & O_ACCMODE) != O_RDWR)) {
-		return EINVAL;
+		result = EINVAL;
+		goto end;
 	}
 	
 	if (((flags & O_EXCL) == O_EXCL) && ((flags & O_CREAT) != O_CREAT)) {
-			return EINVAL;
+		result = EINVAL;
+		goto end;
 	}
 
 	result = copyinstr(u_file, k_file, MAX_PATH, &actual);
 	if (result) {
-		return result;
+		goto end;
 	}
 
 	result = vfs_open(k_file, flags, mode, &vnode);
 	if (result) {
-		return result;
+		goto end;
 	}
+
+	lock_acquire(global_file_count_lk);
+	global_file_count++;
+	lock_release(global_file_count_lk);
 	
-	for (i = 0; i < FILES_PER_PROCESS; i++) {
+	for (i = 0; i < MAX_FILES_PER_PROCESS; i++) {
 		if (curthread->process_table->file_table[i] == NULL) {
 			fd = i;
 			break;
 		}
 	}
-	//TODO init fd to -1 and KASSERT fd != -1
 	
-	curthread->process_table->file_table[fd] = kmalloc(sizeof(struct global_file_handler));
-	//TODO: KASSERT if malloc has gone through?
-	curthread->process_table->file_table[fd]->vnode = vnode;
-	curthread->process_table->file_table[fd]->open_count = 1;
-	curthread->process_table->file_table[fd]->open_flags = flags;
-	curthread->process_table->file_table[fd]->flock = lock_create("file_handler_lk");
-	//TODO: Increment per process file count
-	
+	KASSERT(fd >0);
+
+	struct global_file_handler *file_Handler = curthread->process_table->file_table[fd];
+
+	file_Handler = kmalloc(sizeof(struct global_file_handler));
+
+	KASSERT(file_Handler);
+
+	file_Handler->vnode = vnode;
+	file_Handler->open_count = 1;
+	file_Handler->open_flags = flags;
+	file_Handler->flock = lock_create("file_handler_lk");
+	curthread->process_table->open_file_count++;
+
 	if (flags & O_APPEND) {
-		result = VOP_STAT(curthread->process_table->file_table[fd]->vnode, ptr);
+		result = VOP_STAT(file_Handler->vnode, &file_stat);
 		if (result) {
-			return result;
+			goto end;
 		}
-		curthread->process_table->file_table[fd]->offset = ptr->st_size;
+		file_Handler->offset = file_stat.st_size;
 	} else {
-		curthread->process_table->file_table[fd]->offset = 0;
+		file_Handler->offset = 0;
 	}
 	
 	*fd_ret = fd;
-	return 0;
+	result = 0;
+
+end:
+	kfree(k_file);
+	return result;
 }
 
 int
@@ -114,67 +129,78 @@ sys_write(int fd, userptr_t buf, int size, int *bytes_written)
 	struct uio k_uio;
 	struct iovec k_iov;
 	off_t offset;
+	struct global_file_handler *file_Handler = curthread->process_table->file_table[fd];
 
-	//TODO: check if (0 < fd  < MAX_FILES_PER_PROCESS), you might fault or else
+
 	/* check if fd passed has a valid entry in the process file table */
-	if (curthread->process_table->file_table[fd] == NULL) {
+
+	if(!(0 < fd) && (fd < MAX_FILES_PER_PROCESS)){
 		return EBADF;
 	}
 
-	access_mode = (curthread->process_table->file_table[fd]->open_flags) &
+	if (file_Handler == NULL) {
+		return EBADF;
+	}
+
+	access_mode = (file_Handler->open_flags) &
 					O_ACCMODE;
 	if ((access_mode == O_WRONLY) || (access_mode ==  O_RDWR)) {
-		offset = curthread->process_table->file_table[fd]->offset;
+		offset = file_Handler->offset;
 		uio_kinit(&k_iov, &k_uio, buf, size, offset, UIO_WRITE);
-		ret = VOP_WRITE(curthread->process_table->file_table[fd]->vnode, &k_uio);
+		ret = VOP_WRITE(file_Handler->vnode, &k_uio);
 		if (ret) {
 			return ret;
 		}
 		offset += size;
 		/* acquire lock */
-		lock_acquire(curthread->process_table->file_table[fd]->flock);
+		lock_acquire(file_Handler->flock);
 		/* should this be incremented by size of set to offset? race condition with child/parent? */
-		curthread->process_table->file_table[fd]->offset = offset;
-		lock_release(curthread->process_table->file_table[fd]->flock);
+		file_Handler->offset = offset;
+		lock_release(file_Handler->flock);
 		/* 
 		 * right way to get the bytes written? why would you not write
 		 * all the bytes requested anyway? 
 		 */
-		*bytes_write = size - k_uio.uio_resid;
+		*bytes_written = size - k_uio.uio_resid;
 		return 0;
 	} else {
 		/* return ENOPERMS ?*/
-		return -1;
+		return EBADF;
 	}
 }
 
 int
 sys_read(int fd, void *buf, int size, int *bytes_read)
 {
-	int acess_mode, result;
+	int access_mode, result;
 	off_t offset;
 	struct uio k_uio;
 	struct iovec k_iov;
+	struct global_file_handler *file_Handler = curthread->process_table->file_table[fd];
 
-	if (curthread->process_table->file_table[fd] == NULL) {
-			return EBADF;
+	if(!((0 < fd) && (fd < MAX_FILES_PER_PROCESS) )){
+		return EBADF;
 	}
-	//TODO: Check if the fd is valid, you will fault or else!
-	access_mode = (curthread->process_table->file_table[fd]->open_flags) & O_ACCMODE;
+
+	if (file_Handler == NULL) {
+		return EBADF;
+	}
+
+	access_mode = (file_Handler->open_flags) & O_ACCMODE;
 	if ((access_mode == O_RDONLY) || (access_mode == O_RDWR)) {
 
-		offset = curthread->process_table->file_table[fd]->offset;
+		offset = file_Handler->offset;
 		uio_kinit(&k_iov, &k_uio, buf, size, offset, UIO_READ);
-		result = VOP_READ(curthread->process_table->file_table[fd]->vnode, &k_uio);
+		result = VOP_READ(file_Handler->vnode, &k_uio);
 		if (result) {
 			return result;
 		}
 		offset += size;
 
-		lock_acquire(curthread->process_table->file_table[fd]->flock);
+		lock_acquire(file_Handler->flock);
 		/* should this be incremented by size of set to offset? race condition with child/parent? */
-		curthread->process_table->file_table[fd]->offset = offset;
-		lock_release(curthread->process_table->file_table[fd]->flock);
+		file_Handler->offset = offset;
+		lock_release(file_Handler->flock);
 
 		*bytes_read = size-k_uio.uio_resid;
 		return 0;
@@ -186,25 +212,60 @@ sys_read(int fd, void *buf, int size, int *bytes_read)
 int
 sys_close(int fd)
 {
-	if(curthread->process_table->file_table[fd] == NULL){
+	struct global_file_handler *file_Handler = curthread->process_table->file_table[fd];
+
+	if(!((0 < fd) && (fd < MAX_FILES_PER_PROCESS))){
+			return EBADF;
+	}
+
+	if(file_Handler == NULL){
 				return EBADF;
 	}
 	
-	//TODO check if fd is valid? trying to close a unopened file?
-	KASSERT(curthread->process_table->file_table[fd]->open_count > 0);
+	KASSERT(file_Handler->open_count > 0);
 
 	/* pick a lock before decrementing reference counter */
-	lock_acquire(curthread->process_table->file_table[fd]->flock);
-	curthread->process_table->file_table[fd]->open_count--;
-	lock_release(curthread->process_table->file_table[fd]->flock);
+	lock_acquire(file_Handler->flock);
+	file_Handler->open_count--;
+	lock_release(file_Handler->flock);
 	
-	//TODO: decrement per-process file counter
-	if (curthread->process_table->file_table[fd]->open_count == 0) {
-		vfs_close(curthread->process_table->file_table[fd]->vnode);
-		lock_destroy(curthread->process_table->file_table[fd]->flock);
-		kfree(curthread->process_table->file_table[fd]);
-		curthread->process_table->file_table[fd] = NULL;
-		//TODO: decrement global file count
+
+	curthread->process_table->open_file_count--;
+	if (file_Handler->open_count == 0) {
+		vfs_close(file_Handler->vnode);
+		lock_destroy(file_Handler->flock);
+		kfree(file_Handler);
+		file_Handler = NULL;
+
+
+		lock_acquire(global_file_count_lk);
+		global_file_count--;
+		lock_release(global_file_count_lk);
+	}
+	return 0;
+}
+
+int
+__close(int fd){
+
+	struct global_file_handler *file_Handler = curthread->process_table->file_table[fd];
+
+	lock_acquire(file_Handler->flock);
+	file_Handler->open_count--;
+	lock_release(file_Handler->flock);
+
+	curthread->process_table->open_file_count--;
+
+	if (file_Handler->open_count == 0) {
+			vfs_close(file_Handler->vnode);
+			lock_destroy(file_Handler->flock);
+			kfree(file_Handler);
+			file_Handler = NULL;
+
+
+			lock_acquire(global_file_count_lk);
+			global_file_count--;
+			lock_release(global_file_count_lk);
 	}
 	return 0;
 }
