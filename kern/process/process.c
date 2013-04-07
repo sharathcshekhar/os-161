@@ -11,8 +11,8 @@ struct thread;
 
 /* Global variables */
 uint32_t pid_map[MAX_PID/(sizeof(int) * 8)];
-int pid_count;;
-int global_file_count;;
+int pid_count;
+int global_file_count;
 struct lock *global_ps_table_lk;
 struct lock *global_pid_lk;
 struct lock *global_file_count_lk;
@@ -31,6 +31,7 @@ void process_bootstrap(void)
 	global_ps_table_lk = lock_create("global_process_table_lk");
 	global_pid_lk = lock_create("global_pid_lk");
 	global_file_count_lk = lock_create("global_file_count_lk");
+	global_file_count = 0;
 	return;
 }
 
