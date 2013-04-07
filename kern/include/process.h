@@ -19,7 +19,9 @@ int __waitpid(pid_t *pid, struct process_struct *child_ps_table);
 
 extern uint32_t pid_map[MAX_PID/(sizeof(int) * 8)];
 extern struct lock *global_ps_table_lk;
+extern struct lock *global_file_count_lk;
 extern int pid_count;
+extern int global_file_count;
 
 /* States a process can be in */
 typedef enum {
