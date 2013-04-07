@@ -9,6 +9,8 @@
 #define NO_OF_GLOBAL_FILES 64
 #define MAX_PATH 512
 
+int __close(int fd);
+
 struct global_file_handler {
 	struct vnode *vnode;
 	off_t offset;
