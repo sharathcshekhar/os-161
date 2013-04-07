@@ -211,6 +211,8 @@ sys_read(int fd, void *buf, int size, int *bytes_read)
 int
 sys_close(int fd)
 {
+	int result;
+
 	struct global_file_handler *file_handler = NULL;
 
 	if(!((0 < fd) && (fd < MAX_FILES_PER_PROCESS))){
@@ -225,25 +227,10 @@ sys_close(int fd)
 	
 	KASSERT(file_handler->open_count > 0);
 
-	/* pick a lock before decrementing reference counter */
-	lock_acquire(file_handler->flock);
-	file_handler->open_count--;
-	lock_release(file_handler->flock);
+	result = __close(fd);
+
+	return result;
 	
-
-	curthread->process_table->open_file_count--;
-	if (file_handler->open_count == 0) {
-		vfs_close(file_handler->vnode);
-		lock_destroy(file_handler->flock);
-		kfree(file_handler);
-		file_handler = NULL;
-
-
-		lock_acquire(global_file_count_lk);
-		global_file_count--;
-		lock_release(global_file_count_lk);
-	}
-	return 0;
 }
 
 int
