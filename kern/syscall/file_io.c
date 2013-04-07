@@ -54,7 +54,7 @@ sys_open(userptr_t u_file, int flags, int mode, int *fd_ret){
 
 	struct vnode *vnode;
 
-	if (curthread->process_table->open_file_count == FILES_PER_PROCESS) {
+	if (curthread->process_table->open_file_count == MAX_FILES_PER_PROCESS) {
 		return EMFILE;
 	}
 
@@ -77,7 +77,7 @@ sys_open(userptr_t u_file, int flags, int mode, int *fd_ret){
 		return result;
 	}
 	
-	for (i = 0; i < FILES_PER_PROCESS; i++) {
+	for (i = 0; i < MAX_FILES_PER_PROCESS; i++) {
 		if (curthread->process_table->file_table[i] == NULL) {
 			fd = i;
 			break;
@@ -140,7 +140,7 @@ sys_write(int fd, userptr_t buf, int size, int *bytes_written)
 		 * right way to get the bytes written? why would you not write
 		 * all the bytes requested anyway? 
 		 */
-		*bytes_write = size - k_uio.uio_resid;
+		*bytes_written = size - k_uio.uio_resid;
 		return 0;
 	} else {
 		/* return ENOPERMS ?*/
@@ -151,7 +151,7 @@ sys_write(int fd, userptr_t buf, int size, int *bytes_written)
 int
 sys_read(int fd, void *buf, int size, int *bytes_read)
 {
-	int acess_mode, result;
+	int access_mode, result;
 	off_t offset;
 	struct uio k_uio;
 	struct iovec k_iov;
@@ -178,9 +178,8 @@ sys_read(int fd, void *buf, int size, int *bytes_read)
 
 		*bytes_read = size-k_uio.uio_resid;
 		return 0;
-	} else {
-		return -1;
-	}
+	} 
+	return -1;
 }
 
 int
