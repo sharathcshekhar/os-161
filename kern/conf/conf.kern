@@ -324,13 +324,6 @@ file      thread/synch.c
 file      thread/thread.c
 file      thread/threadlist.c
 
-file      process/process.c
-file      process/fork.c
-file      process/wait_exit.c
-file      process/exec.c
-file      syscall/file.c
-file      process/file_io.h
-
 #
 # Virtual memory system
 # (you will probably want to add stuff here while doing the VM assignment)
@@ -374,6 +367,12 @@ file      vfs/devnull.c
 file      syscall/loadelf.c
 file      syscall/runprogram.c
 file      syscall/time_syscalls.c
+file	  syscall/file_io.c
+file      syscall/file.c
+file      process/process.c
+file      process/fork.c
+file      process/wait_exit.c
+file      process/exec.c
 
 #
 # Startup and initialization

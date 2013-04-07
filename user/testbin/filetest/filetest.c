@@ -91,10 +91,15 @@ main(int argc, char *argv[])
 		errx(1, "Buffer data mismatch!");
 	}
 
+#if 0	
+	/* #if 0'ing remove() as we will not be implementing */ 
+	
 	rv = remove(argv[1]);
 	if (rv<0) {
 		err(1, "%s: remove", argv[1]);
 	}
+#endif	
+
 	printf("Passed filetest.\n");
 	return 0;
 }

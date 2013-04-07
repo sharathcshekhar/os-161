@@ -41,12 +41,6 @@
 #include <vnode.h>
 //#include <null.h>
 
-
-#define MAX_PATH 512
-#define FILES_PER_PROCESS 32
-#define NO_OF_GLOBAL_FILES 64
-
-
 #include <uio.h>
 #include <vnode.h>
 #include <kern/fcntl.h>
@@ -132,6 +126,14 @@ syscall(struct trapframe *tf)
 
 	case SYS_open:
 		err = sys_open((userptr_t)tf->tf_a0, tf->tf_a1, tf->tf_a2, &retval);
+		break;
+
+	case SYS_read:
+		err = sys_read(tf->tf_a0, (userptr_t)tf->tf_a1, tf->tf_a2, &retval);
+		break;
+
+	case SYS_close:
+		err = sys_close(tf->tf_a0);
 		break;
 	
 	case SYS_fork:
