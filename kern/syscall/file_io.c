@@ -45,11 +45,11 @@
 int
 sys_open(userptr_t u_file, int flags, int mode, int *fd_ret){
 
-	int result;
-	int fd = -1, i;
+	int result, i;
+	int fd = -1;
+	int offset = 0;
 	size_t actual;
 	char *k_file = kmalloc(MAX_PATH);
-	struct stat file_stat;
 	struct vnode *vnode;
 	struct global_file_handler *file_handler = NULL;
 
@@ -57,7 +57,8 @@ sys_open(userptr_t u_file, int flags, int mode, int *fd_ret){
 		result = EMFILE;
 		goto end;
 	}
-
+	//TODO: if global_file_count > MAX_FILES, return error
+	
 	if (((flags & O_ACCMODE) != O_RDONLY) && ((flags & O_ACCMODE) != O_WRONLY) &&
 				((flags & O_ACCMODE) != O_RDWR)) {
 		result = EINVAL;
@@ -78,11 +79,17 @@ sys_open(userptr_t u_file, int flags, int mode, int *fd_ret){
 	if (result) {
 		goto end;
 	}
-
-	lock_acquire(global_file_count_lk);
-	global_file_count++;
-	lock_release(global_file_count_lk);
 	
+	if (flags & O_APPEND) {
+		struct stat file_stat;
+		result = VOP_STAT(vnode, &file_stat);
+		if (result) {
+			vfs_close(vnode);
+			goto end;
+		}
+		offset = file_stat.st_size;
+	}
+	/* Find the smallest fd in the table */	
 	for (i = 0; i < MAX_FILES_PER_PROCESS; i++) {
 		if (curthread->process_table->file_table[i] == NULL) {
 			fd = i;
@@ -91,26 +98,21 @@ sys_open(userptr_t u_file, int flags, int mode, int *fd_ret){
 	}
 	
 	KASSERT(fd > 0);
-	curthread->process_table->file_table[fd] = kmalloc(sizeof(struct global_file_handler));
-	file_handler = curthread->process_table->file_table[fd];
-
+	curthread->process_table->open_file_count++;
+	lock_acquire(global_file_count_lk);
+	global_file_count++;
+	lock_release(global_file_count_lk);
+	
+	file_handler = kmalloc(sizeof(struct global_file_handler));
 	KASSERT(file_handler);
 
 	file_handler->vnode = vnode;
 	file_handler->open_count = 1;
 	file_handler->open_flags = flags;
 	file_handler->flock = lock_create("file_handler_lk");
-	curthread->process_table->open_file_count++;
-
-	if (flags & O_APPEND) {
-		result = VOP_STAT(file_handler->vnode, &file_stat);
-		if (result) {
-			goto end;
-		}
-		file_handler->offset = file_stat.st_size;
-	} else {
-		file_handler->offset = 0;
-	}
+	file_handler->offset = offset;
+	
+	curthread->process_table->file_table[fd] = file_handler;
 	
 	*fd_ret = fd;
 	result = 0;
@@ -130,7 +132,7 @@ sys_write(int fd, userptr_t buf, int size, int *bytes_written)
 	struct global_file_handler *file_handler = NULL;
 
 	/* check if fd passed has a valid entry in the process file table */
-	if(!(0 < fd) && (fd < MAX_FILES_PER_PROCESS)){
+	if (!(0 < fd) && (fd < MAX_FILES_PER_PROCESS)) {
 		return EBADF;
 	}
 
@@ -140,8 +142,7 @@ sys_write(int fd, userptr_t buf, int size, int *bytes_written)
 		return EBADF;
 	}
 
-	access_mode = (file_handler->open_flags) &
-					O_ACCMODE;
+	access_mode = (file_handler->open_flags) & O_ACCMODE;
 	if ((access_mode == O_WRONLY) || (access_mode ==  O_RDWR)) {
 		offset = file_handler->offset;
 		uio_kinit(&k_iov, &k_uio, buf, size, offset, UIO_WRITE);
@@ -161,10 +162,9 @@ sys_write(int fd, userptr_t buf, int size, int *bytes_written)
 		 */
 		*bytes_written = size - k_uio.uio_resid;
 		return 0;
-	} else {
-		/* return ENOPERMS ?*/
-		return EBADF;
-	}
+	} 
+	/* return ENOPERMS ?*/
+	return EBADF;
 }
 
 int
@@ -176,7 +176,7 @@ sys_read(int fd, void *buf, int size, int *bytes_read)
 	struct iovec k_iov;
 	struct global_file_handler *file_handler = NULL;
 
-	if(!((0 < fd) && (fd < MAX_FILES_PER_PROCESS) )){
+	if ((fd < 0) || (fd > MAX_FILES_PER_PROCESS)) {
 		return EBADF;
 	}
 
@@ -211,62 +211,35 @@ sys_read(int fd, void *buf, int size, int *bytes_read)
 int
 sys_close(int fd)
 {
-	struct global_file_handler *file_handler = NULL;
-
-	if(!((0 < fd) && (fd < MAX_FILES_PER_PROCESS))){
-			return EBADF;
+	if ((fd < 0) || (fd > MAX_FILES_PER_PROCESS)) {
+		return EBADF;
+	} else if (curthread->process_table->file_table[fd] == NULL){
+		return EBADF;
 	}
+	__close(fd);	
+	return 0;
+}
 
-	file_handler = curthread->process_table->file_table[fd];
-
-	if(file_handler == NULL){
-				return EBADF;
-	}
-	
+void __close(int fd)
+{
+	KASSERT((fd > 0) && (fd < MAX_FILES_PER_PROCESS));
+	struct global_file_handler *file_handler = curthread->process_table->file_table[fd];
 	KASSERT(file_handler->open_count > 0);
-
-	/* pick a lock before decrementing reference counter */
+	
 	lock_acquire(file_handler->flock);
 	file_handler->open_count--;
 	lock_release(file_handler->flock);
-	
 
 	curthread->process_table->open_file_count--;
+
 	if (file_handler->open_count == 0) {
+		curthread->process_table->file_table[fd] = NULL;
 		vfs_close(file_handler->vnode);
 		lock_destroy(file_handler->flock);
 		kfree(file_handler);
-		file_handler = NULL;
-
-
+		
 		lock_acquire(global_file_count_lk);
 		global_file_count--;
 		lock_release(global_file_count_lk);
 	}
-	return 0;
-}
-
-int
-__close(int fd){
-
-	struct global_file_handler *file_handler = curthread->process_table->file_table[fd];
-
-	lock_acquire(file_handler->flock);
-	file_handler->open_count--;
-	lock_release(file_handler->flock);
-
-	curthread->process_table->open_file_count--;
-
-	if (file_handler->open_count == 0) {
-			vfs_close(file_handler->vnode);
-			lock_destroy(file_handler->flock);
-			kfree(file_handler);
-			file_handler = NULL;
-
-
-			lock_acquire(global_file_count_lk);
-			global_file_count--;
-			lock_release(global_file_count_lk);
-	}
-	return 0;
 }
