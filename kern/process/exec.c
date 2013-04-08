@@ -35,16 +35,34 @@ int sys_execv(userptr_t u_prog, userptr_t *u_argv, struct trapframe *tf)
 	int ret = 0, k_argc = 0, i = 0;
 
 	ret = copyinstr(u_prog, k_progname, MAX_PROGRAM_NAME, &len);
-	if (ret == ENAMETOOLONG) {
-		return ret;
+	if (ret != 0) {
+		/* ENAMETOOLONG */
+		goto clean_exit;
 	}
 	
-	while ((u_argv[k_argc] != NULL) && (i < MAX_ARGC)) {
+	/* bad bad user, randcall passes a set of bad pointers! */
+	do {
+		userptr_t k_ptr;
 		k_argv[k_argc] = kmalloc(MAX_ARGV_LEN);
-		copyinstr(u_argv[k_argc], k_argv[k_argc], MAX_ARGV_LEN, &len);
+		if (k_argv[k_argc] == NULL) {
+			ret = ENOMEM;
+			goto clean_exit;
+		}
+		ret = copyin((userptr_t)&u_argv[k_argc], (void*)&k_ptr, 4);
+		if (ret != 0) {
+			goto clean_exit;
+		}
+		ret = copyinstr(k_ptr, k_argv[k_argc], MAX_ARGV_LEN, &len);
+		if (ret != 0) {
+			goto clean_exit;
+		}
 		k_argc++;
+	} while ((k_argv[k_argc] != NULL) && (k_argc < MAX_ARGC)); 
+	
+	if (k_argc == MAX_ARGC) {
+		ret = E2BIG;
+		goto clean_exit;
 	}
-	k_argv[k_argc] = NULL;
 
 	/* Open the exec file. */
 	ret = vfs_open(k_progname, O_RDONLY, 0, &v);
