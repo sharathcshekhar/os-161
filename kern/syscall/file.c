@@ -94,7 +94,7 @@ sys___getcwd(userptr_t usr_buf, size_t buflen, int32_t *actual_len)
 	struct iovec k_iov;
 	*actual_len = 0;
 
-	uio_kinit(&k_iov, &k_uio, usr_buf, buflen, 0, UIO_READ);
+	uio_uinit(&k_iov, &k_uio, usr_buf, buflen, 0, UIO_READ);
 	ret = vfs_getcwd(&k_uio);
 	if (ret != 0) {
 		/* EIO, EFAULT, ENOENT */

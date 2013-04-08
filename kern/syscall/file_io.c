@@ -110,6 +110,7 @@ sys_open(userptr_t u_file, int flags, int mode, int *fd_ret){
 	file_handler->open_count = 1;
 	file_handler->open_flags = flags;
 	file_handler->flock = lock_create("file_handler_lk");
+	KASSERT(file_handler->flock);
 	file_handler->offset = offset;
 	
 	curthread->process_table->file_table[fd] = file_handler;
@@ -132,7 +133,7 @@ sys_write(int fd, userptr_t buf, int size, int *bytes_written)
 	struct global_file_handler *file_handler = NULL;
 
 	/* check if fd passed has a valid entry in the process file table */
-	if (!(0 < fd) && (fd < MAX_FILES_PER_PROCESS)) {
+	if ((fd < 0) || (fd > MAX_FILES_PER_PROCESS)) {
 		return EBADF;
 	}
 
@@ -145,7 +146,7 @@ sys_write(int fd, userptr_t buf, int size, int *bytes_written)
 	access_mode = (file_handler->open_flags) & O_ACCMODE;
 	if ((access_mode == O_WRONLY) || (access_mode ==  O_RDWR)) {
 		offset = file_handler->offset;
-		uio_kinit(&k_iov, &k_uio, buf, size, offset, UIO_WRITE);
+		uio_uinit(&k_iov, &k_uio, buf, size, offset, UIO_WRITE);
 		ret = VOP_WRITE(file_handler->vnode, &k_uio);
 		if (ret) {
 			return ret;
@@ -190,7 +191,7 @@ sys_read(int fd, void *buf, int size, int *bytes_read)
 	if ((access_mode == O_RDONLY) || (access_mode == O_RDWR)) {
 
 		offset = file_handler->offset;
-		uio_kinit(&k_iov, &k_uio, buf, size, offset, UIO_READ);
+		uio_uinit(&k_iov, &k_uio, buf, size, offset, UIO_READ);
 		result = VOP_READ(file_handler->vnode, &k_uio);
 		if (result) {
 			return result;
@@ -231,9 +232,9 @@ void __close(int fd)
 	lock_release(file_handler->flock);
 
 	curthread->process_table->open_file_count--;
+	curthread->process_table->file_table[fd] = NULL;
 
 	if (file_handler->open_count == 0) {
-		curthread->process_table->file_table[fd] = NULL;
 		vfs_close(file_handler->vnode);
 		lock_destroy(file_handler->flock);
 		kfree(file_handler);
