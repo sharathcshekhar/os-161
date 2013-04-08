@@ -86,7 +86,6 @@ static
 void
 cmd_progthread(void *ptr, unsigned long nargs)
 {
-//	char **args = ptr;
 	struct cmd_progthread_args *thread_args = ptr;
 	char progname[128];
 	int result;
@@ -106,8 +105,14 @@ cmd_progthread(void *ptr, unsigned long nargs)
 
 	result = runprogram(progname, nargs, argv, thread_args->child_ps_table);
 	if (result) {
+		struct process_struct *ps_table = thread_args->child_ps_table;
 		kprintf("Running program %s failed: %s\n", args[0],
 			strerror(result));
+		lock_acquire(ps_table->status_lk);
+		ps_table->status = PS_FAIL;
+		cv_signal(ps_table->status_cv, ps_table->status_lk);
+		lock_release(ps_table->status_lk);
+		kfree(argv);
 		return;
 	}
 
@@ -131,7 +136,9 @@ int
 common_prog(int nargs, char **args)
 {
 	int result;
+	int pid, status;
 	struct cmd_progthread_args *thread_args = kmalloc(sizeof(struct cmd_progthread_args));
+	KASSERT(thread_args);
 
 #if OPT_SYNCHPROBS
 	kprintf("Warning: this probably won't work with a "
@@ -150,8 +157,22 @@ common_prog(int nargs, char **args)
 		kprintf("thread_fork failed: %s\n", strerror(result));
 		return result;
 	}
-	int pid, status;
 	pid = child_ps_table->pid;
+	
+	lock_acquire(child_ps_table->status_lk);
+	if (child_ps_table->status == PS_CREATE) {
+		/* Child is being created, wait */
+		cv_wait(child_ps_table->status_cv, child_ps_table->status_lk);
+	}
+	lock_release(child_ps_table->status_lk);
+	kfree(thread_args);	
+	
+	if (child_ps_table->status == PS_FAIL) {
+		kfree(child_ps_table);
+		/* Could not think of an appropriate error */
+		return 0;
+	}/* else creation has succeeded, wait for the user process to gracefully exit */		
+	
 	status = __waitpid(&pid, child_ps_table);
 	return 0;
 }

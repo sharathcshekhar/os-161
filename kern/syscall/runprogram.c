@@ -60,6 +60,7 @@ runprogram(char *progname, long nargs, void *arg_ptr, void *ps_table)
 	struct vnode *v;
 	vaddr_t entrypoint, stackptr;
 	int result;
+	uint32_t usr_argv;
 
 	/* Open the file. */
 	result = vfs_open(progname, O_RDONLY, 0, &v);
@@ -98,18 +99,22 @@ runprogram(char *progname, long nargs, void *arg_ptr, void *ps_table)
 		return result;
 	}
 	
+	/* This is the first user process, if it is here, it's alreay running */
+	lock_acquire(child_ps_table->status_lk);
+	child_ps_table->status = PS_RUN;
+	cv_signal(child_ps_table->status_cv, child_ps_table->status_lk);
+	lock_release(child_ps_table->status_lk);
+	
+	result = open_std_streams(child_ps_table->file_table);
+	child_ps_table->open_file_count += 3;	
+	
 	curthread->process_table = child_ps_table;
 	KASSERT(curthread->process_table != NULL);
-	/* This is the first user space process, if it is here, it's alreay running */
-	curthread->process_table->status = PS_RUN;
-	result = open_std_streams(curthread->process_table->file_table);
-	curthread->process_table->open_file_count += 3;	
 	
 	/* Warp to user mode. */
-	//enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,
-	//		  stackptr, entrypoint);
-	uint32_t usr_argv;
 	copyout_args((int)nargs, (void**)argv, &stackptr, &usr_argv);
+	/* Free the allocated memory for args on the kernel heap */
+	kfree(arg_ptr);
 	enter_new_process((int)nargs, (userptr_t)usr_argv,
 			  stackptr, entrypoint);
 	
