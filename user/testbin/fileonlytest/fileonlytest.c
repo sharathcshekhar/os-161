@@ -159,9 +159,9 @@ main(int argc, char **argv)
 	}
 		
 	// 23 Mar 2012 : GWA : FIXME : Spin until exit() works.
-	
-	printf("Spinning in case exit() doesn't work.\n");
-	while (1) {};
-
+	// exit() is working, undoing while(1)
+	//printf("Spinning in case exit() doesn't work.\n");
+	//while (1) {};
+	printf("Everything seems to work\n"
 	return 0;
 }
