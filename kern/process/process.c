@@ -102,11 +102,19 @@ create_process_table(void)
 	struct process_struct *process;
 	int i;
 	process = kmalloc(sizeof(struct process_struct));
+	if (process == NULL) {
+		return NULL;
+	}
 	process->process_name = NULL;
 	process->pid = get_pid();
 	process->thread = curthread;
 	process->status = PS_CREATE;
 	process->file_table = kmalloc(MAX_FILES_PER_PROCESS * sizeof(struct global_file_hanlder**));
+	
+	if (process->file_table == NULL) {
+		kfree(process);
+		return NULL;
+	}
 	
 	/* init the file table */
 	for (i = 0; i < MAX_FILES_PER_PROCESS; i++) {
@@ -116,8 +124,21 @@ create_process_table(void)
 	process->children = NULL;
 	process->father = curthread->process_table;
 	process->exit_code = 0;
+	
 	process->status_cv = cv_create("status_cv");
+	if (process->status_cv == NULL) {
+		kfree(process->file_table);
+		kfree(process);
+		return NULL;
+	}
+	
 	process->status_lk = lock_create("status_lk");
+	if (process->status_lk == NULL) {
+		cv_destroy(process->status_cv);
+		kfree(process->file_table);
+		kfree(process);
+		return NULL;
+	}
 	
 	return process;
 }
@@ -165,6 +186,20 @@ int open_std_streams(struct global_file_handler **file_table)
 	file_table[2]->flock = lock_create("file_handler_lk");
 	
 	return 0;
+}
+
+void 
+destroy_process_table(struct process_struct *ps_table)
+{
+	clear_pid(ps_table->pid);
+	lock_destroy(ps_table->status_lk);
+	cv_destroy(ps_table->status_cv);
+	if (!ps_table->process_name) {	
+		/* If process name is assigned, reclaim it */
+		kfree(ps_table->process_name);
+	}
+	kfree(ps_table);
+	return;
 }
 
 /*

@@ -30,13 +30,33 @@ int sys_fork(struct trapframe *tf, int *child_pid)
 	char name[] = "O_sweet_child";
 	int ret;
 
-	if (pid_count == MAX_PID) {
-		*child_pid = -1;
-		return 1;
-	}
+	if (args == NULL) {
+		return ENOMEM;
+	}	
 	
+	if (pid_count == MAX_PID) {
+		ret = ENPROC;
+		goto clean_exit;
+	}
+	/* Make sure there is enough memory to add a child entry */
+	child = kmalloc(sizeof(struct child_process_list));
+	if (child == NULL) {
+		ret = ENOMEM;
+		goto clean_exit;
+	}	
 	args->as = as_create();
+	if (args->as == NULL) {
+		kfree(child);
+		ret = ENOMEM;
+		goto clean_exit;
+	}
 	args->ps_table = create_process_table();
+	if (args->ps_table == NULL) {
+		as_destroy(args->as);
+		kfree(child);
+		ret = ENOMEM;
+		goto clean_exit;
+	}
 	args->tf = tf;
 	as_copy(curthread->t_addrspace, &args->as);
 	
@@ -44,7 +64,12 @@ int sys_fork(struct trapframe *tf, int *child_pid)
 			create_user_process /* thread function */,
 			(void*)args /* thread arg */, 1 /* thread arg */,
 			NULL);
-	
+	if (ret != 0) {
+		as_destroy(args->as);
+		destroy_process_table(args->ps_table);
+		kfree(child);
+		goto clean_exit;
+	}
 	lock_acquire(args->ps_table->status_lk);
 	if (args->ps_table->status == PS_CREATE) {
 		/* Child is being created, wait */
@@ -58,29 +83,30 @@ int sys_fork(struct trapframe *tf, int *child_pid)
 	 */
 	
 	if (args->ps_table->status == PS_FAIL) {
-		/* handle failures */
+		as_destroy(args->as);
+		destroy_process_table(args->ps_table);
+		kfree(child);
 		*child_pid = -1;
-		ret = 1;
+		ret = ENOMEM;
 		goto clean_exit;
 	} /* else fork_status == E_CHILD_SUCCESS */
 
 	if (curthread->process_table->children == NULL) {
 		/* First child */
-		curthread->process_table->children = kmalloc(sizeof(
-					struct child_process_list));
+		curthread->process_table->children = child; 
 		curthread->process_table->children->next = NULL;
 		curthread->process_table->children->prev = NULL;
 		curthread->process_table->children->child = args->ps_table;
 	} else {
 	   	/* Append new node to the list of children */	
-		child = curthread->process_table->children;
-		while (child->next != NULL) {
-			child = child->next;
+		struct child_process_list *itr = curthread->process_table->children;
+		while (itr->next != NULL) {
+			itr = itr->next;
 		}
-		child->next = kmalloc(sizeof(struct child_process_list));
-		child->next->child = args->ps_table;
-		child->next->next = NULL;
-		child->next->prev = child;
+		itr->next = child;
+		itr->next->child = args->ps_table;
+		itr->next->next = NULL;
+		itr->next->prev = child;
 	}
 	
 	*child_pid = args->ps_table->pid;

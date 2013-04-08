@@ -12,6 +12,7 @@ int get_pid(void);
 void clear_pid(int pid);
 void pid_init(void);
 struct process_struct* create_process_table(void);
+void destroy_process_table(struct process_struct *ps_table);
 void process_bootstrap(void);
 int open_std_streams(struct global_file_handler **file_table);
 int copyout_args(int k_argc, void** k_argv, uint32_t *usr_sp, uint32_t *usr_argv);

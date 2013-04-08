@@ -9,7 +9,6 @@
 #include <copyinout.h>
 
 static void adopt_grand_children(struct child_process_list *children, struct process_struct *new_parent);
-static void destroy_process_table(struct process_struct *ps_table);
 
 /* Only Termination is supported. SIGSTOP is not supported */
 int
@@ -89,20 +88,6 @@ int __waitpid(pid_t *pid, struct process_struct *child_ps_table)
 	*pid = child_ps_table->pid;
 	destroy_process_table(child_ps_table);
 	return status;
-}
-
-static void 
-destroy_process_table(struct process_struct *ps_table)
-{
-	clear_pid(ps_table->pid);
-	lock_destroy(ps_table->status_lk);
-	cv_destroy(ps_table->status_cv);
-	if (!ps_table->process_name) {	
-		/* If process name is assigned, reclaim it */
-		kfree(ps_table->process_name);
-	}
-	kfree(ps_table);
-	return;
 }
 
 void
