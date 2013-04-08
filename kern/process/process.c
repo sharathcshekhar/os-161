@@ -194,7 +194,7 @@ destroy_process_table(struct process_struct *ps_table)
 	clear_pid(ps_table->pid);
 	lock_destroy(ps_table->status_lk);
 	cv_destroy(ps_table->status_cv);
-	if (!ps_table->process_name) {	
+	if (ps_table->process_name != NULL) {	
 		/* If process name is assigned, reclaim it */
 		kfree(ps_table->process_name);
 	}

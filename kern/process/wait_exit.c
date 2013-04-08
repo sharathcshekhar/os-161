@@ -7,6 +7,7 @@
 #include <thread.h>
 #include <kern/wait.h>
 #include <copyinout.h>
+#include <kern/errno.h>
 
 static void adopt_grand_children(struct child_process_list *children, struct process_struct *new_parent);
 
@@ -18,17 +19,14 @@ sys_waitpid(pid_t *pid, userptr_t u_status, int options)
 	struct process_struct *child_ps_table = NULL;
 	int k_status;
 	int ret;
-	
-	ret = copyin(u_status, (void*)&k_status, 4);
-	KASSERT(ret == 0);
-	
+	//TODO: check if pid is valid or not	
 	if (options != 0) {
 		/* Not supported, report error */
-		return 1;
+		return EINVAL;
 	}	
 	if (itr == NULL) {
 		/* waiting with no kids! Error! */
-		return 1;
+		return ECHILD;
 	}
 	
 	/* delink the child from the list of children */
@@ -58,13 +56,15 @@ sys_waitpid(pid_t *pid, userptr_t u_status, int options)
 	
 	if (child_ps_table == NULL) {
 		/* not my child */
-		return 1;
+		return ECHILD;
 	}
 	
 	k_status = __waitpid(pid, child_ps_table);
 	ret = copyout((void*)&k_status, u_status, 4);
-	/* dont ASSERT, return error if invalid pointer is passed! */
-	KASSERT(ret == 0);
+	if (ret != 0) {
+		/* Should I check the validity of the pointer at the start? */
+		return EFAULT;
+	}	
 	return 0;
 }
 

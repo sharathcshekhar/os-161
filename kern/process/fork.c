@@ -106,7 +106,7 @@ int sys_fork(struct trapframe *tf, int *child_pid)
 		itr->next = child;
 		itr->next->child = args->ps_table;
 		itr->next->next = NULL;
-		itr->next->prev = child;
+		itr->next->prev = itr;
 	}
 	
 	*child_pid = args->ps_table->pid;
