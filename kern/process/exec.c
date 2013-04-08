@@ -76,6 +76,7 @@ int sys_execv(userptr_t u_prog, userptr_t *u_argv, struct trapframe *tf)
 	as_activate(NULL);
     
 	curthread->t_addrspace = as_create();
+	KASSERT(curthread->t_addrspace);
 	/* Activate the new address space */
 	as_activate(curthread->t_addrspace);
 	
@@ -99,7 +100,7 @@ int sys_execv(userptr_t u_prog, userptr_t *u_argv, struct trapframe *tf)
 	
 	/* 
 	 * if we have reached this point, everything has gone well and execv 
-	 * has succeedded zero the trapfram, and destory the old address space 
+	 * has succeeded. zero the trapfram, and destory the old address space 
 	 */
 	bzero(tf, sizeof(struct trapframe));	
 	as_destroy(old_as);

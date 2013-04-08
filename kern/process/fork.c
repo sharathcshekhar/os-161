@@ -58,7 +58,14 @@ int sys_fork(struct trapframe *tf, int *child_pid)
 		goto clean_exit;
 	}
 	args->tf = tf;
-	as_copy(curthread->t_addrspace, &args->as);
+	ret = as_copy(curthread->t_addrspace, &args->as);
+	/* copy was not going through resulting in panic in randcall test! */
+	if (ret != 0) {
+		as_destroy(args->as);
+		kfree(child);
+		destroy_process_table(args->ps_table);
+		goto clean_exit;
+	}
 	
 	ret = thread_fork(name /* thread name */,
 			create_user_process /* thread function */,
