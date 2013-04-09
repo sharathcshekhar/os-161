@@ -158,7 +158,7 @@ int open_std_streams(struct global_file_handler **file_table)
 	file_table[0] = kmalloc(sizeof(struct global_file_handler));
 	file_table[0]->vnode = std_in;
 	file_table[0]->offset = 0;
-	file_table[0]->open_count++;
+	file_table[0]->open_count = 1;
 	file_table[0]->open_flags = O_RDONLY;
 	/* Ref counts and locks migh not be required for std io streams */
 	file_table[0]->flock = lock_create("file_handler_lk");
@@ -170,7 +170,7 @@ int open_std_streams(struct global_file_handler **file_table)
 	file_table[1] = kmalloc(sizeof(struct global_file_handler));
 	file_table[1]->vnode = std_out;
 	file_table[1]->offset = 0;
-	file_table[1]->open_count++;
+	file_table[1]->open_count = 1;
 	file_table[1]->open_flags = O_WRONLY;
 	file_table[1]->flock = lock_create("file_handler_lk");
 	
@@ -181,7 +181,7 @@ int open_std_streams(struct global_file_handler **file_table)
 	file_table[2] = kmalloc(sizeof(struct global_file_handler));
 	file_table[2]->vnode = std_err;
 	file_table[2]->offset = 0;
-	file_table[2]->open_count++;
+	file_table[2]->open_count = 1;
 	file_table[2]->open_flags = O_WRONLY;
 	file_table[2]->flock = lock_create("file_handler_lk");
 	
