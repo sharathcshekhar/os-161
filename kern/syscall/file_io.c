@@ -223,7 +223,7 @@ sys_close(int fd)
 
 void __close(int fd)
 {
-	KASSERT((fd > 0) && (fd < MAX_FILES_PER_PROCESS));
+	KASSERT((fd >= 0) && (fd <= MAX_FILES_PER_PROCESS));
 	struct global_file_handler *file_handler = curthread->process_table->file_table[fd];
 	KASSERT(file_handler->open_count > 0);
 	
