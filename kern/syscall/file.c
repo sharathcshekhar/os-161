@@ -118,10 +118,15 @@ sys_dup2(int oldfd, int newfd, int *fd_ret)
 	if (newfd < 0 || newfd > MAX_FILES_PER_PROCESS) {
 		return EBADF;
 	}
+	if (newfd == oldfd) {
+		/* Don't do anything */
+		*fd_ret = newfd;
+		return 0;
+	}
+	//TODO: if newfd is already a dup of oldfd, shortcut and don't do anything
 	
 	if (curthread->process_table->file_table[newfd] != NULL) {
-		/* TODO replace sys_close() with  __close() */
-		sys_close(newfd);
+		__close(newfd);
 	}
 	
 	if (curthread->process_table->open_file_count == MAX_FILES_PER_PROCESS) {
