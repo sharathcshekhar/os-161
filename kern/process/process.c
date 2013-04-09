@@ -46,6 +46,18 @@ void clear_pid(int pid)
 	lock_release(global_pid_lk);
 }
 
+bool is_pid_in_use(pid_t pid)
+{
+	int index = pid/32;
+	int bit_offset = pid % 32;
+	int mask = 1 << bit_offset;
+	if (pid_map[index] & mask) {
+		return true;
+	} else {
+		return false;
+	}
+}
+
 int get_pid(void) 
 {
 	int offset;

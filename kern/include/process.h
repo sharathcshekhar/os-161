@@ -11,6 +11,7 @@
 int get_pid(void);
 void clear_pid(int pid);
 void pid_init(void);
+bool is_pid_in_use(pid_t pid);
 struct process_struct* create_process_table(void);
 void destroy_process_table(struct process_struct *ps_table);
 void process_bootstrap(void);
