@@ -52,12 +52,17 @@ int sys_execv(userptr_t u_prog, userptr_t *u_argv, struct trapframe *tf)
 		if (ret != 0) {
 			goto clean_exit;
 		}
+		if (k_ptr == NULL) {
+			/* End of argument list */
+			k_argv[k_argc] = NULL;
+			break;
+		}
 		ret = copyinstr(k_ptr, k_argv[k_argc], MAX_ARGV_LEN, &len);
 		if (ret != 0) {
 			goto clean_exit;
 		}
 		k_argc++;
-	} while ((k_argv[k_argc] != NULL) && (k_argc < MAX_ARGC)); 
+	} while (k_argc < MAX_ARGC); 
 	
 	if (k_argc == MAX_ARGC) {
 		ret = E2BIG;

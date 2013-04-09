@@ -10,7 +10,6 @@
 #include <kern/fcntl.h>
 #include <copyinout.h>
 #include <vnode.h>
-#include <vnode.h>
 #include <vfs.h>
 #include <uio.h>
 
@@ -25,7 +24,6 @@ sys_lseek(int fd, off_t pos, userptr_t whence_ptr, off_t *new_pos)
 	if (ret != 0) {
 		return ret;
 	}
-	/* How to implement ESPIPE - lseek on object that does not support seek? */
 	if (fd < 0 || fd > MAX_FILES_PER_PROCESS) {
 		return EBADF;
 	}
@@ -54,10 +52,12 @@ sys_lseek(int fd, off_t pos, userptr_t whence_ptr, off_t *new_pos)
 			return EINVAL;
 	}	
 	
-	if (*new_pos < 0) {
-		/* Resulting seek position would be negative */
-		return EINVAL;
+	ret = VOP_TRYSEEK(curthread->process_table->file_table[fd]->vnode, *new_pos);	
+	if (ret != 0) {
+		/* EINVAL for negative pos, ESPIPE for lseek on device */
+		return ret;
 	}
+	
 	lock_acquire(curthread->process_table->file_table[fd]->flock);
 	curthread->process_table->file_table[fd]->offset = *new_pos;
 	lock_release(curthread->process_table->file_table[fd]->flock);
