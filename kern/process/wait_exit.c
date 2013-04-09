@@ -19,7 +19,13 @@ sys_waitpid(pid_t *pid, userptr_t u_status, int options)
 	struct process_struct *child_ps_table = NULL;
 	int k_status;
 	int ret;
-	//TODO: check if pid is valid or not	
+	
+	if ((*pid < 2) || (*pid >= MAX_PID)) {
+		return EINVAL;
+	}
+	if (!is_pid_in_use(*pid)) {
+		return ESRCH;
+	}
 	if (options != 0) {
 		/* Not supported, report error */
 		return EINVAL;

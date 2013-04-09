@@ -24,8 +24,9 @@ static int set_pid(int index, int offset);
 void process_bootstrap(void)
 {
 	uint32_t i; /* to supress compiler warning */
-	pid_count = 0;
-	for (i = 0; i < (MAX_PID/(sizeof(int) * 8)); i++) {
+	pid_count = 1;
+	pid_map[0] = 1; /* Do not allocate PID 0 */
+	for (i = 1; i < (MAX_PID/(sizeof(int) * 8)); i++) {
 		pid_map[i] = 0;
 	}
 	global_ps_table_lk = lock_create("global_process_table_lk");
