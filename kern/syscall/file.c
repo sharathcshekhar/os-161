@@ -130,7 +130,7 @@ sys_dup2(int oldfd, int newfd, int *fd_ret)
 	}
 	
 	if (curthread->process_table->open_file_count == MAX_FILES_PER_PROCESS) {
-		/* redundant, but I didn't design this */
+		/* TOCHECK: Why? why? redundant, but I didn't design this */
 		return EMFILE;
 	}
 	

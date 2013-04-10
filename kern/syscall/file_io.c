@@ -154,7 +154,7 @@ sys_write(int fd, userptr_t buf, int size, int *bytes_written)
 		offset += size;
 		/* acquire lock */
 		lock_acquire(file_handler->flock);
-		/* should this be incremented by size of set to offset? race condition with child/parent? */
+		/* TOCHECK: should this be incremented by size of set to offset? race condition with child/parent? */
 		file_handler->offset = offset;
 		lock_release(file_handler->flock);
 		/* 
@@ -164,7 +164,6 @@ sys_write(int fd, userptr_t buf, int size, int *bytes_written)
 		*bytes_written = size - k_uio.uio_resid;
 		return 0;
 	} 
-	/* return ENOPERMS ?*/
 	return EBADF;
 }
 
@@ -199,7 +198,7 @@ sys_read(int fd, void *buf, int size, int *bytes_read)
 		offset += size;
 
 		lock_acquire(file_handler->flock);
-		/* should this be incremented by size of set to offset? race condition with child/parent? */
+		/* TOCHECK: should this be incremented by size of set to offset? race condition with child/parent? */
 		file_handler->offset = offset;
 		lock_release(file_handler->flock);
 

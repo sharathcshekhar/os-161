@@ -68,7 +68,7 @@ sys_waitpid(pid_t *pid, userptr_t u_status, int options)
 	k_status = __waitpid(pid, child_ps_table);
 	ret = copyout((void*)&k_status, u_status, 4);
 	if (ret != 0) {
-		/* Should I check the validity of the pointer at the start? */
+		/* TOCHECK: Should I check the validity of the pointer at the start? */
 		return EFAULT;
 	}	
 	return 0;

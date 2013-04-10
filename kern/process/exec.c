@@ -39,7 +39,7 @@ int sys_execv(userptr_t u_prog, userptr_t *u_argv, struct trapframe *tf)
 		/* ENAMETOOLONG */
 		goto clean_exit;
 	}
-	
+	//TODO: Allocate memory only once and not in a loop!	
 	/* bad bad user, randcall passes a set of bad pointers! */
 	do {
 		userptr_t k_ptr;
@@ -118,6 +118,7 @@ int sys_execv(userptr_t u_prog, userptr_t *u_argv, struct trapframe *tf)
 	tf->tf_status = CST_IRQMASK | CST_IEp | CST_KUp;
 	ret = 0;
 
+	//TODO: Add more labels and cleaner way to exit
 clean_exit:
 	/* free all the memory allocated for the arguments */
 	kfree(k_progname);
@@ -172,6 +173,7 @@ int copyout_args(int k_argc, void** k_argv, uint32_t *usr_sp, uint32_t *usr_argv
 		if (ret != 0) {
 			return ret;
 		}
+		//TODO: Replace it with simple memcpy may be?
 		ret = copyout((void *) &dest_ptr, (void *) u_args_ptr, 4);
 		if (ret != 0) {
 			return ret;
@@ -179,7 +181,7 @@ int copyout_args(int k_argc, void** k_argv, uint32_t *usr_sp, uint32_t *usr_argv
 		DEBUG(DB_EXEC, "argv[%d] points to %p\n", i, (uint32_t *)dest_ptr);
 		u_args_ptr += 4;
 	}
-
+	//TODO:replace it with bzero?
 	ret = copyout((void *) &(zero_blk), (void *) u_args_ptr, 4);
 	//ret = copyout_zeros((usrptr_t)u_args_ptr, 4)
 	if (ret != 0) {
