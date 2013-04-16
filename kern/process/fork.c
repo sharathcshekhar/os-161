@@ -44,15 +44,8 @@ int sys_fork(struct trapframe *tf, int *child_pid)
 		ret = ENOMEM;
 		goto clean_exit;
 	}	
-	args->as = as_create();
-	if (args->as == NULL) {
-		kfree(child);
-		ret = ENOMEM;
-		goto clean_exit;
-	}
 	args->ps_table = create_process_table();
 	if (args->ps_table == NULL) {
-		as_destroy(args->as);
 		kfree(child);
 		ret = ENOMEM;
 		goto clean_exit;
@@ -61,7 +54,6 @@ int sys_fork(struct trapframe *tf, int *child_pid)
 	ret = as_copy(curthread->t_addrspace, &args->as);
 	/* copy was not going through resulting in panic in randcall test! */
 	if (ret != 0) {
-		as_destroy(args->as);
 		kfree(child);
 		destroy_process_table(args->ps_table);
 		goto clean_exit;
@@ -169,5 +161,7 @@ create_user_process(void *args, unsigned long data)
 	/* Signal no error */
 	child_tf.tf_a3 = 0;
 	/* All set to enter user mode as a new process */
+
+	//TODO: call as_complete_load() to prepare to goto user space
 	mips_usermode(&child_tf);
 }
