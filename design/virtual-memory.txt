@@ -1,0 +1,131 @@
+A - Physical memory management:
+
+Data Structures:
+
+struct coremap:
+	ppgno - physical page number it is mapped to
+	count - no of pages continously allocated from here.
+	state - clean/dirty/free
+
+/* 
+ * if count = 0 page is free, if count = 1, 1 page has been allocated, if count > 1, 
+ * that many pages have been allocated and free them all
+ */
+
+function: vm_bootstrap():
+1. Call ram_getsize() get lastphaddr, firsrphaddr
+2. Create an array of ph_pgno (ramsize/4k) entries by setting the pointer by hand
+
+function: getppages() which is now calling ram_stealmem() 
+This should do the following:
+1. Traverse the coremap array to find a unused page
+2. If no page is found: goto SWAPPING algorithm
+3. return the page address of the unused memory
+
+function: free_kpages() should now do this:
+1. Will get a virtual address. Convert it to physical address
+1. Find the physical page in the coremap array and free the "count" number of physical pages
+2. Optionally zero them all it
+
+B - Address Space Management
+
+struct addrspace in the structure thread has to be replaced with a linked list
+
+struct addrspace:
+	paddr_t as_stackpbase;
+	page_table - doubly-linked list of PTE
+	/* to be used by sbrk/brk calls */
+	heap_base
+	heap_top
+	
+struct PTE:
+	status - (P_TLB, P_SWP, P_MEM, P_UNAL) 
+	phy addr
+	virtual addr
+	lru_bit - used to evict a victim
+	offset - location on the disk
+	
+Address space related calls:
+
+as_create():
+in dumbvm, everything is just zeroed. 
+1. Allocate memory for addrspace structure
+
+as_copy()
+/**fix the bug in fork() due to which as_create() is being called twice**/
+
+1. Copy the PTE virtual address fields
+2. Get physical memory
+3. Duplicate the physical pages associated
+4. Associate the new as with the new PTEs
+
+as_define_region()
+In dumbvm only 2 regions are defined here.
+1. Do demand paging. Add entry to virtual address in the PTE and mark the page unallocated
+2. Append the PTE to the page_table list
+
+as_define_stack(): 
+1.works fine it as is.
+
+as_destroy():
+1. fine as is
+
+as_activate()
+1. Invalidate the TLB; fine as is
+
+as_complete_load(): 
+Does nothing in dumbvm? Can we ignore this for now?
+
+as_prepare_load():
+In dumb VM this is the one which actually allocates memory
+Nothing to do. Can we ignore this for now?
+
+
+C - Fault handling:
+
+function: vm_fault()
+/*All entries into TLB will have dirty bit set to 0, indicating its read only, when write
+ exception happens, the permissions are checked for the page segment. If its writatble, dirty bit is set in the PTE too
+*/
+This has to be modified to support on-demand paging. When a fault occurs:
+1. Get the virtual page number from the address
+2. See if the address is a stack? If it is within the stackbase, goto 5
+3. Traverse the page table to find out if the address is valid
+4. If the address is already associated with a Physical address, update the TLP
+5. If not, check if any physical pages are available. If not CALL SWAPPING algorithm
+6. if yes, call getppages() to get 1 physical page and update the TLB
+7. Update the lru_bit to indicate the page was recently accessed
+	
+D - Swap Management:
+Design considerations:
+Swapping algorithm - LRU:
+
+1. how to maintain global circular linked list of Pagetable entries?
+   PTEs are designed to be per process
+
+2. Since they are global, highest degree of synchronization is needed
+
+3. How to handle swapping out a page? it is a disk IO, causing the process to sleep, scheduling another
+   process. If this process tries to access the page you are tyring to swap out, you are screwed!
+
+4. disable irqs when rotating the clock
+
+map = core-map.firt
+while (1):
+	if (map.addrspace.lru_bit == 0):
+		return map
+	else:
+		map.addrspace.lru_bit = 0
+		map = map.next
+
+swapd - swapping deamon:
+1. Run in the background and keep checking the core-map for dirty pages
+2. When a dirty page is found, write the contents to the disk, mark clean
+-- design considerations --
+3. 
+4.
+
+E - sbrk()/brk() system calls
+1. Change the values of heap base and heap top
+
+*Make sure the heap base begins at _end*
