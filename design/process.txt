@@ -7,27 +7,31 @@ Data Structures:
 PROCESS TABLE:
 The data structure is maintained in the kernel for each process and would have the below parameters:
 
-1. Pointer to the thread_t structure
-2. PID
-3. File table indicating the no of files open and their file descriptors
-4. Status of the process - is anyone waiting on this process or is it ready to run?
-5. List of PIDs of the Children
-6. PPID - Parent process ID
+1. Back pointer to the corresponding thread_t structure
+Rationale: Some day I might want to maintain the process tree and track threads by its process rather than
+the otherway round. For now, its redundant.
+2. PID - an int from 1 - 1023
+3. File table: A pointer to a file table
+Rationale: One day this might become a huge list, which I do not want to maintain on the stack.
+4. File count: count of the no of files opened by this process
+5. Status of the process - is anyone waiting on this process or is it ready to run?
+Rationale: Useful for fork/exec/waitpid/exit synchronization
+6. Children Tree: This is a linked list of process tables of all the children
+Rationale: Traverse the tree in DFS fashion, and voila, we have a process tree!
+7. Parent's Process table
 
 FILE TABLE:
 1. This is data structure contains information about the files opened by the process
 2. Each descriptor points to a file structure which has the present offset in the file
 
-GLOBAL FILE TABLE: doubly linked list
+GLOBAL FILE HANDLER: doubly linked list
 
 Modification to existing Data Structures:
 struct thread new entry to contain the process table
 
-PID generation Mechanism: O(log n) algorithm for allocating PIDs
-1. PIDs are allocated sequentially from 0 to MAX_USER_PROCESSES
-2. Whether the PID is in use or not is maintained in bit map. Every time a new PID has to be allocated,
-the bitmap is scanned and the lowest PID is allocated to the new process.
-3. When the process exits, the PID is cleared from the bit map()
+Efficient PID generator using bitmaps
+1. Lowest available PID between 1 and MAX_USER_PROCESSES is allocated. 1 is the first user process spawned from the kernel menu
+2. Bitmap is set when a pid gets allocated and cleared when a process exits
 
 Algorithms for System calls
 
@@ -46,26 +50,27 @@ No arguments are passed - Just call the function.
 
 Algorithm of sys_fork():
 
-1. Check if the process cont has exceeded the MAX_USER_PROCESS, if yes, return failure
-2. Find a free pid to allocate to the newly created process
-3. Spawn a kernel thread immediately to handle the new process - call thread_fork() and pass create_new_process()
-// save the trap frame in the parent thread
-4. Wait for a signal from the child thread to return back to user space.
-
-5. In create_new_process():
-	1. create a new process in the process table and add that to the thread->process
+1. Check if the process count has exceeded the MAX_USER_PROCESS, if yes, return failure
+2. create a new process in the process table and add that to the thread->process
+3. Create new address space by calling as_create()
+4. call as_copy() to create a copy of the existing address space
+5. Verify if as_copy goes through, if not return "No memory"
+6. Find a free pid to allocate to the newly created process
+7. Spawn a kernel thread immediately to handle the new process - call thread_fork() and pass create_new_process()
+8. Wait for a signal from the child thread to return back to user space.
+		
+9. In create_new_process():
+	1. Copy the trap frame
 	2. Clone file table in the process table, set the PPID, set the child process table for the parent
-	3. Create new address space by calling as_create(), reset the child TLB by calling as_activate()
-	4. call as_copy() to create a copy of the existing address space
-	5. Copy the trap frame
-	6. define the user space stack by calling as_define_stack()
-	7. set the entry point same as (program counter + 4)
-	8. If no errors, set the newly allocated pid in a shared variable and 
+	3. Set the new address_space, set the new process_table
+	4. define the user space stack by calling as_define_stack()
+	5. set the entry point same as (program counter + 4)
+	6. If no errors, set the newly allocated pid in a shared variable and 
 	   signal the parent that it can go back to user space
-	9. set the return value to 0 enter the user program by calling enter_new_process() //call mips_usermode()
-	10. If any errors, set -1 in a shared variable, signal the waiting parent, destroy resources and call thread_exit() 
+	7. set the return value to 0 enter the user program by calling enter_new_process() //call mips_usermode()
+	8. If any errors, set -1 in a shared variable, signal the waiting parent, destroy resources and call thread_exit() 
 	
-6. Set the return value to the pid of the child process in tf->tf_v0 and return
+10. Set the return value to the pid of the child process in tf->tf_v0 and return
 
 Synchronization:
 1. The parent process should not go back to user mode until the trapframe has been copied to the child process
@@ -82,7 +87,7 @@ Synchronization:
 5. Copy old address space thread->t_address_space to a tmp pointer
 5. call load_elf() and load the new address space with the ELF values
 6. on any failure, destory the new address space, and set the address space back to the old as
-8. Push argc and argv to stack, se the trap frame 
+8. Push argc and argv to stack, set the trap frame 
 9. return control to usermode
 	  
 @args out: Never returns
