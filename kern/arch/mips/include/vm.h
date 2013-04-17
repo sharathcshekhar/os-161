@@ -102,6 +102,39 @@ void ram_bootstrap(void);
 paddr_t ram_stealmem(unsigned long npages);
 void ram_getsize(paddr_t *lo, paddr_t *hi);
 
+typedef enum {
+	PG_TLB = 0,
+	PG_MEM,
+	PG_SWP,
+	PG_UNALOC,
+	PG_BUSY,
+	PG_UNKNOWN,
+} page_status_t;
+
+struct pg_table_entry {
+	paddr_t ppage;
+	vaddr_t vpage;
+	page_status_t state;
+	off_t swp_offset;
+};
+
+struct pagetable {
+	struct pg_table_entry entry;
+	struct pagetable *next;
+	struct pagetable *prev;
+};
+
+struct coremap_t {
+	paddr_t ppage; 				/* physical address of this page */
+	struct pg_table_entry *pte; /* page table entry that is pointing to this addr */
+	/* to be used in swapping */
+	bool lru_bit;
+	/* unused for now, leak memory */
+	bool nxt_pg;
+	bool status;
+};
+
+paddr_t getppages(unsigned long npages);
 /*
  * TLB shootdown bits.
  *

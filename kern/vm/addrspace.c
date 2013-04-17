@@ -33,11 +33,31 @@
 #include <addrspace.h>
 #include <vm.h>
 
+#include <spl.h>
+#include <spinlock.h>
+#include <thread.h>
+#include <current.h>
+#include <mips/tlb.h>
+#include <mips/vm.h>
+
+#define _STACKPAGES    12
+
 /*
  * Note! If OPT_DUMBVM is set, as is the case until you start the VM
  * assignment, this file is not compiled or linked or in any way
  * used. The cheesy hack versions in dumbvm.c are used instead.
  */
+
+/*
+static void as_zero_region(paddr_t paddr, unsigned npages);
+
+static
+void
+as_zero_region(paddr_t paddr, unsigned npages)
+{
+	bzero((void *)PADDR_TO_KVADDR(paddr), npages * PAGE_SIZE);
+}
+*/
 
 struct addrspace *
 as_create(void)
@@ -48,11 +68,25 @@ as_create(void)
 	if (as == NULL) {
 		return NULL;
 	}
+	
+	as->as_vbase1 = 0;
+	as->as_pbase1 = 0;
+	as->as_npages1 = 0;
+	as->as_vbase2 = 0;
+	as->as_pbase2 = 0;
+	as->as_npages2 = 0;
+	as->as_stackpbase = 0;
 
 	/*
 	 * Initialize as needed.
 	 */
-
+	as->page_table = kmalloc(sizeof(struct pagetable));
+	as->page_table->entry.ppage = 0;
+	as->page_table->entry.vpage = 0;
+	as->page_table->entry.state = PG_UNKNOWN;
+	as->page_table->entry.swp_offset = 0; 
+	as->heap_base = 0;
+	as->heap_top = 0;
 	return as;
 }
 
@@ -60,9 +94,9 @@ int
 as_copy(struct addrspace *old, struct addrspace **ret)
 {
 	struct addrspace *newas;
-
+	panic("as_copy: Govinda Govinda!\n");
 	newas = as_create();
-	if (newas==NULL) {
+	if (newas == NULL) {
 		return ENOMEM;
 	}
 
@@ -89,11 +123,13 @@ as_destroy(struct addrspace *as)
 void
 as_activate(struct addrspace *as)
 {
-	/*
-	 * Write this.
-	 */
-
 	(void)as;  // suppress warning until code gets written
+	int i, spl;
+	spl = splhigh();
+	for (i = 0; i < NUM_TLB; i++) {
+		tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
+	}
+	splx(spl);
 }
 
 /*
@@ -110,26 +146,84 @@ int
 as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 		 int readable, int writeable, int executable)
 {
-	/*
-	 * Write this.
-	 */
+	size_t npages; 
 
-	(void)as;
-	(void)vaddr;
-	(void)sz;
+	/* Align the region. First, the base... */
+	sz += vaddr & ~(vaddr_t)PAGE_FRAME;
+	vaddr &= PAGE_FRAME;
+
+	/* ...and now the length. */
+	sz = (sz + PAGE_SIZE - 1) & PAGE_FRAME;
+
+	npages = sz / PAGE_SIZE;
+
+	/* We don't use these - all pages are read-write */
 	(void)readable;
 	(void)writeable;
 	(void)executable;
+	/*
+	if (as->as_vbase1 == 0) {
+		as->as_vbase1 = vaddr;
+		as->as_npages1 = npages;
+		return 0;
+	}
+
+	if (as->as_vbase2 == 0) {
+		as->as_vbase2 = vaddr;
+		as->as_npages2 = npages;
+		return 0;
+	}
+	
+	kprintf("dumbvm: Warning: too many regions\n");
 	return EUNIMP;
+	*/
+	
+	struct pagetable *pte = as->page_table;
+	uint32_t i;	
+	KASSERT(pte);
+	while (pte->next != NULL) {
+		pte = pte->next;
+	}
+	for (i = 0; i < npages; i++) {
+		pte->next = kmalloc(sizeof(struct pagetable));
+		KASSERT(pte->next);
+		pte = pte->next;
+		pte->next = NULL;
+		pte->entry.vpage = vaddr;
+		pte->entry.state = PG_UNALOC;
+	}
+	return 0;
 }
 
 int
 as_prepare_load(struct addrspace *as)
 {
 	/*
-	 * Write this.
-	 */
+	
+	KASSERT(as->as_pbase1 == 0);
+	KASSERT(as->as_pbase2 == 0);
+	KASSERT(as->as_stackpbase == 0);
 
+	as->as_pbase1 = getppages(as->as_npages1);
+	if (as->as_pbase1 == 0) {
+		return ENOMEM;
+	}
+
+	as->as_pbase2 = getppages(as->as_npages2);
+	if (as->as_pbase2 == 0) {
+		return ENOMEM;
+	}
+
+	as->as_stackpbase = getppages(_STACKPAGES);
+	if (as->as_stackpbase == 0) {
+		return ENOMEM;
+	}
+
+	as_zero_region(as->as_pbase1, as->as_npages1);
+	as_zero_region(as->as_pbase2, as->as_npages2);
+	as_zero_region(as->as_stackpbase, _STACKPAGES);
+	
+	*/
 	(void)as;
 	return 0;
 }
@@ -159,4 +253,3 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 	
 	return 0;
 }
-
