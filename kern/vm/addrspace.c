@@ -86,20 +86,31 @@ as_create(void)
 int
 as_copy(struct addrspace *old, struct addrspace **ret)
 {
-	struct addrspace *newas;
-	panic("as_copy: Govinda Govinda!\n");
-	newas = as_create();
+	struct addrspace *new_as;
+   	new_as = as_create();
 	if (newas == NULL) {
 		return ENOMEM;
 	}
-
-	/*
-	 * Write this.
-	 */
-
-	(void)old;
 	
-	*ret = newas;
+	/* First copy the Page table */	
+	struct pagetable *old_pte = old->page_table;
+	struct pagetable *new_pte = new_as->page_table;
+	while (old_pte != NULL) {
+		new_pte->next = kmalloc(sizeof(struct pagetable));
+		new_pte->entry = old_pte->entry;
+		if (old_pte->entry.status != UNALOC) {
+			new_pte->entry.ppage = getppage(1);
+			KASSERT(new_pte->entry.ppage);
+			memmove((void *)PADDR_TO_KVADDR(new_pte->entry.ppage),
+						(const void *)PADDR_TO_KVADDR(old_pte->entry.ppage),
+						PAGE_SIZE);
+		}
+		new_pte->next = old_pte->next;
+		new_pte = new_pte->next;
+		old_pte = old_pte->next;
+	}
+
+	*ret = new_as;
 	return 0;
 }
 
@@ -190,32 +201,6 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 int
 as_prepare_load(struct addrspace *as)
 {
-	/*
-	
-	KASSERT(as->as_pbase1 == 0);
-	KASSERT(as->as_pbase2 == 0);
-	KASSERT(as->as_stackpbase == 0);
-
-	as->as_pbase1 = getppages(as->as_npages1);
-	if (as->as_pbase1 == 0) {
-		return ENOMEM;
-	}
-
-	as->as_pbase2 = getppages(as->as_npages2);
-	if (as->as_pbase2 == 0) {
-		return ENOMEM;
-	}
-
-	as->as_stackpbase = getppages(_STACKPAGES);
-	if (as->as_stackpbase == 0) {
-		return ENOMEM;
-	}
-
-	as_zero_region(as->as_pbase1, as->as_npages1);
-	as_zero_region(as->as_pbase2, as->as_npages2);
-	as_zero_region(as->as_stackpbase, _STACKPAGES);
-	
-	*/
 	(void)as;
 	return 0;
 }
