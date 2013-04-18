@@ -135,6 +135,7 @@ struct coremap_t {
 };
 
 paddr_t getppages(unsigned long npages);
+void free_coremap(paddr_t addr);
 /*
  * TLB shootdown bits.
  *

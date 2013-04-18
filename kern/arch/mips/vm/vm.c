@@ -102,6 +102,19 @@ free_kpages(vaddr_t addr)
 	spinlock_release(&stealmem_lock);
 }
 
+void 
+free_coremap(paddr_t addr)
+{
+	int i;
+	spinlock_acquire(&stealmem_lock);
+	for (i = 0; i < ppages; i++) {
+		if (coremap[i].ppage == addr) {
+			coremap[i].status = false;
+			break;
+		}
+	}
+	spinlock_release(&stealmem_lock);
+}
 void
 vm_tlbshootdown_all(void)
 {
@@ -178,6 +191,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		pte->next = kmalloc(sizeof(struct pagetable));
 		pte->next->entry.ppage = getppages(1);
 		pte->next->entry.state = PG_TLB;
+		pte->next->next = NULL;
 		paddr = pte->next->entry.ppage;
 		found = true;
 	}

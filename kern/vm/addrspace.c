@@ -77,14 +77,7 @@ as_create(void)
 	as->as_npages2 = 0;
 	as->as_stackpbase = 0;
 
-	/*
-	 * Initialize as needed.
-	 */
-	as->page_table = kmalloc(sizeof(struct pagetable));
-	as->page_table->entry.ppage = 0;
-	as->page_table->entry.vpage = 0;
-	as->page_table->entry.state = PG_UNKNOWN;
-	as->page_table->entry.swp_offset = 0; 
+	as->page_table = NULL; 
 	as->heap_base = 0;
 	as->heap_top = 0;
 	return as;
@@ -113,10 +106,14 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 void
 as_destroy(struct addrspace *as)
 {
-	/*
-	 * Clean up as needed.
-	 */
-	
+	struct pagetable *pte = as->page_table;
+	while (pte != NULL) {
+		struct pagetable *tmp;
+		free_coremap(pte->entry.ppage);
+		tmp = pte;
+		pte = pte->next;
+		kfree(tmp);
+	}
 	kfree(as);
 }
 
@@ -161,26 +158,19 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 	(void)readable;
 	(void)writeable;
 	(void)executable;
-	/*
-	if (as->as_vbase1 == 0) {
-		as->as_vbase1 = vaddr;
-		as->as_npages1 = npages;
-		return 0;
-	}
 
-	if (as->as_vbase2 == 0) {
-		as->as_vbase2 = vaddr;
-		as->as_npages2 = npages;
-		return 0;
+	uint32_t i;	
+	if (as->page_table == NULL) {
+		as->page_table = kmalloc(sizeof(struct pagetable));
+		as->page_table->next = NULL;
+		as->page_table->entry.ppage = 0;
+		as->page_table->entry.vpage = vaddr;
+		as->page_table->entry.state = PG_UNALOC;
+		as->page_table->entry.swp_offset = 0;
+	   	npages--;
 	}
-	
-	kprintf("dumbvm: Warning: too many regions\n");
-	return EUNIMP;
-	*/
 	
 	struct pagetable *pte = as->page_table;
-	uint32_t i;	
-	KASSERT(pte);
 	while (pte->next != NULL) {
 		pte = pte->next;
 	}
