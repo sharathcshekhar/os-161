@@ -168,6 +168,7 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 		as->page_table->entry.state = PG_UNALOC;
 		as->page_table->entry.swp_offset = 0;
 	   	npages--;
+		vaddr += PAGE_SIZE;
 	}
 	
 	struct pagetable *pte = as->page_table;
@@ -181,6 +182,7 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 		pte->next = NULL;
 		pte->entry.vpage = vaddr;
 		pte->entry.state = PG_UNALOC;
+		vaddr += PAGE_SIZE;
 	}
 	return 0;
 }
