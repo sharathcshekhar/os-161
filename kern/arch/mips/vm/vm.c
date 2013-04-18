@@ -183,7 +183,8 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	
 	if ((found == false) && (faultaddress >= stackbase) &&
 			(faultaddress < stacktop)) {
-		/* allocate new page and add it to the Pagetable */
+		KASSERT(0);
+		/*	allocate new page and add it to the Pagetable 
 		pte = as->page_table;
 		while (pte->next != NULL) {
 			pte = pte->next;
@@ -194,6 +195,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		pte->next->next = NULL;
 		paddr = pte->next->entry.ppage;
 		found = true;
+	*/
 	}
 	
 	if (found == false) {

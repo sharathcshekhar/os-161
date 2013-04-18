@@ -234,14 +234,24 @@ as_complete_load(struct addrspace *as)
 int
 as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 {
-	/*
-	 * Write this.
-	 */
-
-	(void)as;
+	struct pagetable *pte = as->page_table;
+	int i;
+	KASSERT(pte != NULL);
+	while (pte->next != NULL) {
+		pte = pte->next;
+	}
+	vaddr_t stack_pg = (USERSTACK - 1) & PAGE_FRAME;
+	for (i = 0; i < _STACKPAGES; i++) {
+		pte->next = kmalloc(sizeof(struct pagetable));
+		KASSERT(pte->next);
+		pte = pte->next;
+		pte->next = NULL;
+		pte->entry.vpage = stack_pg;
+		pte->entry.state = PG_UNALOC;
+		stack_pg -= PAGE_SIZE;
+	}
 
 	/* Initial user-level stack pointer */
 	*stackptr = USERSTACK;
-	
 	return 0;
 }
