@@ -88,25 +88,28 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 {
 	struct addrspace *new_as;
    	new_as = as_create();
-	if (newas == NULL) {
+	if (new_as == NULL) {
 		return ENOMEM;
 	}
-	
+	new_as->page_table = kmalloc(sizeof(struct pagetable));
 	/* First copy the Page table */	
 	struct pagetable *old_pte = old->page_table;
 	struct pagetable *new_pte = new_as->page_table;
 	while (old_pte != NULL) {
-		new_pte->next = kmalloc(sizeof(struct pagetable));
 		new_pte->entry = old_pte->entry;
-		if (old_pte->entry.status != UNALOC) {
-			new_pte->entry.ppage = getppage(1);
+		if (old_pte->entry.state != PG_UNALOC) {
+			new_pte->entry.ppage = getppages(1);
 			KASSERT(new_pte->entry.ppage);
 			memmove((void *)PADDR_TO_KVADDR(new_pte->entry.ppage),
 						(const void *)PADDR_TO_KVADDR(old_pte->entry.ppage),
 						PAGE_SIZE);
 		}
-		new_pte->next = old_pte->next;
-		new_pte = new_pte->next;
+		if (old_pte->next == NULL) {
+			new_pte->next = NULL;
+		} else {
+			new_pte->next = kmalloc(sizeof(struct pagetable));
+			new_pte = new_pte->next;
+		}
 		old_pte = old_pte->next;
 	}
 

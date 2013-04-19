@@ -195,7 +195,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		pte->next->next = NULL;
 		paddr = pte->next->entry.ppage;
 		found = true;
-	*/
+	_*/
 	}
 	
 	if (found == false) {
