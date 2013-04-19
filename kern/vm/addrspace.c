@@ -43,12 +43,6 @@
 #define _STACKPAGES    12
 
 /*
- * Note! If OPT_DUMBVM is set, as is the case until you start the VM
- * assignment, this file is not compiled or linked or in any way
- * used. The cheesy hack versions in dumbvm.c are used instead.
- */
-
-/*
 static void as_zero_region(paddr_t paddr, unsigned npages);
 
 static
@@ -68,15 +62,7 @@ as_create(void)
 	if (as == NULL) {
 		return NULL;
 	}
-	
-	as->as_vbase1 = 0;
-	as->as_pbase1 = 0;
-	as->as_npages1 = 0;
-	as->as_vbase2 = 0;
-	as->as_pbase2 = 0;
-	as->as_npages2 = 0;
 	as->as_stackpbase = 0;
-
 	as->page_table = NULL; 
 	as->heap_base = 0;
 	as->heap_top = 0;
@@ -148,10 +134,6 @@ as_activate(struct addrspace *as)
  * segment in memory extends from VADDR up to (but not including)
  * VADDR+MEMSIZE.
  *
- * The READABLE, WRITEABLE, and EXECUTABLE flags are set if read,
- * write, or execute permission should be set on the segment. At the
- * moment, these are ignored. When you write the VM system, you may
- * want to implement them.
  */
 int
 as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
@@ -211,10 +193,6 @@ as_prepare_load(struct addrspace *as)
 int
 as_complete_load(struct addrspace *as)
 {
-	/*
-	 * Write this.
-	 */
-
 	(void)as;
 	return 0;
 }

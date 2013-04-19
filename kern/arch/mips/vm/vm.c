@@ -195,7 +195,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		pte->next->next = NULL;
 		paddr = pte->next->entry.ppage;
 		found = true;
-	_*/
+	*/
 	}
 	
 	if (found == false) {
@@ -219,8 +219,15 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		splx(spl);
 		return 0;
 	}
-
-	kprintf("vm: Ran out of TLB entries - cannot handle page fault\n");
+	uint32_t tlb_entry = random() % NUM_TLB;
+	tlb_write(TLBHI_INVALID(tlb_entry), TLBLO_INVALID(), tlb_entry);
+	ehi = faultaddress;
+	elo = paddr | TLBLO_DIRTY | TLBLO_VALID;
+	DEBUG(DB_VM, "vm: 0x%x -> 0x%x\n", faultaddress, paddr);
+	tlb_write(ehi, elo, tlb_entry);
+	
+	DEBUG(DB_VM, "Ran out of TLB entries - doing random TLB replacement\n");
 	splx(spl);
-	return EFAULT;
+	
+	return 0;
 }
