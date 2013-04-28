@@ -48,6 +48,12 @@ vm_bootstrap(void)
 	vm_initialized = true;
 }
 
+void as_zero_region(paddr_t paddr, unsigned npages);
+void as_zero_region(paddr_t paddr, unsigned npages)
+{
+	bzero((void *)PADDR_TO_KVADDR(paddr), npages * PAGE_SIZE);
+}
+
 paddr_t
 getppages(unsigned long npages)
 {
@@ -66,6 +72,7 @@ getppages(unsigned long npages)
 				break;
 			}
 		}
+		as_zero_region(addr, 1);
 		spinlock_release(&stealmem_lock);
 	}
 	KASSERT(addr != 0);
@@ -221,6 +228,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		splx(spl);
 		return 0;
 	}
+	KASSERT(1);
 	uint32_t tlb_entry = random() % NUM_TLB;
 	tlb_write(TLBHI_INVALID(tlb_entry), TLBLO_INVALID(), tlb_entry);
 	ehi = faultaddress;
