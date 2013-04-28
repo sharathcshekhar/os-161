@@ -17,6 +17,7 @@ static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 static bool vm_initialized = false;
 struct coremap_t *coremap = NULL;
 static int ppages = 0;
+int kpages_in_use = 0;
 
 static void coremap_init(paddr_t lo_ram);
 
@@ -88,6 +89,7 @@ alloc_kpages(int npages)
 	if (pa == 0) {
 		return 0;
 	}
+	kpages_in_use++;
 	return PADDR_TO_KVADDR(pa);
 }
 
@@ -103,6 +105,7 @@ free_kpages(vaddr_t addr)
 		vaddr_t va = PADDR_TO_KVADDR(coremap[i].ppage);
 		if (va == addr) {
 			coremap[i].status = false;
+			kpages_in_use--;
 			break;
 		}
 	}

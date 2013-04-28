@@ -125,7 +125,7 @@ as_destroy(struct addrspace *as)
 void
 as_activate(struct addrspace *as)
 {
-	(void)as;  // suppress warning until code gets written
+	(void)as; /* TODO: load the TLB with PTEs present int he address space */
 	int i, spl;
 	spl = splhigh();
 	for (i = 0; i < NUM_TLB; i++) {
