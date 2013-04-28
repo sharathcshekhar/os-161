@@ -71,5 +71,6 @@ int sys_lseek(int fd, off_t pos, userptr_t whence_ptr, off_t *new_pos);
 int sys_chdir(userptr_t pathname);
 int sys___getcwd(userptr_t buf, size_t buflen, int32_t *actual_len);
 int sys_dup2(int oldfd, int newfd, int *fd_ret);
+int sys_sbrk(intptr_t amount, int32_t *cur_brk);
 
 #endif /* _SYSCALL_H_ */

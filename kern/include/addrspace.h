@@ -61,7 +61,7 @@ struct addrspace {
 	struct pagetable *page_table;
 	/* used after sbrk() */
 	int heap_base;
-	int heap_top;
+	int cur_brk;
 };
 
 /*

@@ -176,6 +176,7 @@ test1(void)
 	printf("*** Malloc test 1 ***\n");
 	printf("Allocating %u bytes\n", BIGSIZE);
 	x = malloc(BIGSIZE);
+	//x = malloc(12);
 	if (x==NULL) {
 		printf("FAILED: malloc failed\n");
 		return;

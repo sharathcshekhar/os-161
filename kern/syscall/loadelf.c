@@ -212,7 +212,7 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 	 * might have a larger structure, so we must use e_phentsize
 	 * to find where the phdr starts.
 	 */
-
+	vaddr_t last_seg_addr = 0;
 	for (i=0; i<eh.e_phnum; i++) {
 		off_t offset = eh.e_phoff + i*eh.e_phentsize;
 		uio_kinit(&iov, &ku, &ph, sizeof(ph), offset, UIO_READ);
@@ -221,6 +221,7 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 		if (result) {
 			return result;
 		}
+		kprintf(">>>Segment starts at %x, size = %d, type = %x\n", ph.p_vaddr, ph.p_memsz, ph.p_type);
 
 		if (ku.uio_resid != 0) {
 			/* short read; problem with executable? */
@@ -239,11 +240,17 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 			return ENOEXEC;
 		}
 
+		kprintf("Loading...\n");
 		result = as_define_region(curthread->t_addrspace,
 					  ph.p_vaddr, ph.p_memsz,
 					  ph.p_flags & PF_R,
 					  ph.p_flags & PF_W,
 					  ph.p_flags & PF_X);
+		
+		if (ph.p_vaddr > last_seg_addr) {
+			curthread->t_addrspace->heap_base = ph.p_vaddr + ph.p_memsz;
+			last_seg_addr = ph.p_vaddr;
+		}
 		if (result) {
 			return result;
 		}
@@ -253,7 +260,15 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 	if (result) {
 		return result;
 	}
-
+	
+	if ((curthread->t_addrspace->heap_base % PAGE_SIZE) != 0) {
+			curthread->t_addrspace->heap_base &= PAGE_FRAME;
+			curthread->t_addrspace->heap_base += PAGE_SIZE;
+	}
+	
+	KASSERT((curthread->t_addrspace->heap_base & (~PAGE_FRAME)) == 0);
+	curthread->t_addrspace->cur_brk = curthread->t_addrspace->heap_base;
+	kprintf("heap_base = cur_brk = %x\n", curthread->t_addrspace->heap_base);
 	/*
 	 * Now actually load each segment.
 	 */

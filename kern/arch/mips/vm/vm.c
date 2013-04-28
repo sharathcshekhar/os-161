@@ -207,6 +207,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	/* Disable interrupts on this CPU while frobbing the TLB. */
 	spl = splhigh();
 
+	spinlock_acquire(&stealmem_lock);
 	for (i = 0; i < NUM_TLB; i++) {
 		tlb_read(&ehi, &elo, i);
 		if (elo & TLBLO_VALID) {
@@ -216,6 +217,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		elo = paddr | TLBLO_DIRTY | TLBLO_VALID;
 		DEBUG(DB_VM, "vm: 0x%x -> 0x%x\n", faultaddress, paddr);
 		tlb_write(ehi, elo, i);
+		spinlock_release(&stealmem_lock);
 		splx(spl);
 		return 0;
 	}
@@ -227,6 +229,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	tlb_write(ehi, elo, tlb_entry);
 	
 	DEBUG(DB_VM, "Ran out of TLB entries - doing random TLB replacement\n");
+	spinlock_release(&stealmem_lock);
 	splx(spl);
 	
 	return 0;

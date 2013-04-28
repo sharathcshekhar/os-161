@@ -39,6 +39,7 @@
 #include <current.h>
 #include <mips/tlb.h>
 #include <mips/vm.h>
+#include <syscall.h>
 
 #define _STACKPAGES    12
 
@@ -53,6 +54,8 @@ as_zero_region(paddr_t paddr, unsigned npages)
 }
 */
 
+int free_vpages(vaddr_t vpage, int npages);
+
 struct addrspace *
 as_create(void)
 {
@@ -65,7 +68,7 @@ as_create(void)
 	as->as_stackpbase = 0;
 	as->page_table = NULL; 
 	as->heap_base = 0;
-	as->heap_top = 0;
+	as->cur_brk = 0;
 	return as;
 }
 
@@ -81,6 +84,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 	/* First copy the Page table */	
 	struct pagetable *old_pte = old->page_table;
 	struct pagetable *new_pte = new_as->page_table;
+	new_pte->prev = NULL;
 	while (old_pte != NULL) {
 		new_pte->entry = old_pte->entry;
 		if (old_pte->entry.state != PG_UNALOC) {
@@ -94,6 +98,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 			new_pte->next = NULL;
 		} else {
 			new_pte->next = kmalloc(sizeof(struct pagetable));
+			new_pte->next->prev = new_pte;
 			new_pte = new_pte->next;
 		}
 		old_pte = old_pte->next;
@@ -159,8 +164,10 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 	if (as->page_table == NULL) {
 		as->page_table = kmalloc(sizeof(struct pagetable));
 		as->page_table->next = NULL;
+		as->page_table->prev = NULL;
 		as->page_table->entry.ppage = 0;
 		as->page_table->entry.vpage = vaddr;
+		as->page_table->entry.ppage = 0;
 		as->page_table->entry.state = PG_UNALOC;
 		as->page_table->entry.swp_offset = 0;
 	   	npages--;
@@ -174,9 +181,11 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 	for (i = 0; i < npages; i++) {
 		pte->next = kmalloc(sizeof(struct pagetable));
 		KASSERT(pte->next);
+		pte->next->prev = pte;
 		pte = pte->next;
 		pte->next = NULL;
 		pte->entry.vpage = vaddr;
+		pte->entry.ppage = 0;
 		pte->entry.state = PG_UNALOC;
 		vaddr += PAGE_SIZE;
 	}
@@ -210,9 +219,11 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 	for (i = 0; i < _STACKPAGES; i++) {
 		pte->next = kmalloc(sizeof(struct pagetable));
 		KASSERT(pte->next);
+		pte->next->prev = pte;
 		pte = pte->next;
 		pte->next = NULL;
 		pte->entry.vpage = stack_pg;
+		pte->entry.ppage = 0;
 		pte->entry.state = PG_UNALOC;
 		stack_pg -= PAGE_SIZE;
 	}
@@ -220,4 +231,100 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 	/* Initial user-level stack pointer */
 	*stackptr = USERSTACK;
 	return 0;
+}
+
+int
+sys_sbrk(intptr_t amount, int32_t *cur_brk)
+{
+	size_t npages; 
+	vaddr_t heap_pg;
+	uint32_t i;
+	struct pagetable *pte = curthread->t_addrspace->page_table;
+	int free_heap = 0;
+
+	*cur_brk = (int32_t)curthread->t_addrspace->cur_brk;
+	//kprintf("sbrk request amount = %u\n", (uint32_t)amount);	
+	if (amount == 0) {
+		return 0;	
+	} else if (amount > 0) {
+		
+		/* Check if the existing allocation can satisfy request */
+		if (curthread->t_addrspace->cur_brk != curthread->t_addrspace->heap_base) {
+			/* at least 1 page has been allocated */
+			free_heap = PAGE_SIZE - (curthread->t_addrspace->cur_brk % PAGE_SIZE);
+			if (free_heap == PAGE_SIZE) {
+				free_heap = 0;	
+			}
+		}
+
+		if (amount <= free_heap) {
+	//		kprintf("Satisfied in existing heap 0x%x\n", curthread->t_addrspace->cur_brk & PAGE_FRAME);
+	//		if ((curthread->t_addrspace->cur_brk & PAGE_FRAME) == 0x44a000) {
+	//			kprintf("I will panic now\n");
+	//		}
+			curthread->t_addrspace->cur_brk += amount;
+	//		kprintf("Setting cur_brk to 0x%x\n", curthread->t_addrspace->cur_brk);
+			return 0;
+		}
+		amount -= free_heap;
+		npages = 1 + (amount - 1) / PAGE_SIZE;
+
+		while (pte->next != NULL) {
+			pte = pte->next;
+		}
+		
+		heap_pg = (curthread->t_addrspace->cur_brk + free_heap) & PAGE_FRAME;
+		for (i = 0; i < npages; i++) {
+	//		kprintf("Allocating new heap page at 0x%x\n", heap_pg);
+			pte->next = kmalloc(sizeof(struct pagetable));
+			if (pte->next == NULL) {
+				/* Ran out of memory, no swapping implemented */
+				return ENOMEM;
+			}
+			pte->next->prev = pte;
+			pte = pte->next;
+			pte->next = NULL;
+			pte->entry.vpage = heap_pg;
+			pte->entry.ppage = 0;
+			pte->entry.state = PG_UNALOC;
+			heap_pg += PAGE_SIZE;
+		}
+		curthread->t_addrspace->cur_brk += (amount + free_heap);
+	//	kprintf("Setting cur_brk to 0x%x\n", curthread->t_addrspace->cur_brk);
+	} else {
+		/* free page operation */
+		KASSERT(1);
+		vaddr_t old_brk_page = curthread->t_addrspace->cur_brk & PAGE_FRAME;
+		vaddr_t new_brk_page = (curthread->t_addrspace->cur_brk + amount) & PAGE_FRAME;
+		int ret = free_vpages(new_brk_page + PAGE_SIZE, (old_brk_page - new_brk_page)/PAGE_SIZE);
+		KASSERT(ret == 0);
+	}
+	return 0;
+}
+
+int free_vpages(vaddr_t vpage, int npages)
+{
+	struct pagetable *pte = curthread->t_addrspace->page_table;
+	
+	while (pte != NULL || npages != 0) {
+		if (pte->entry.vpage == vpage) {
+			struct pagetable *tmp;
+			free_kpages(vpage);
+			vpage += PAGE_SIZE;
+			npages--;
+			/* unlink the pte from the table and free it */
+			tmp = pte;
+			pte = pte->next;
+			/* heap entry can never be the first entry in the page table */
+			KASSERT(tmp->prev != NULL);
+			if (tmp->next != NULL){
+				tmp->prev->next = tmp->next;
+				tmp->next->prev = tmp->prev;
+			}
+			kfree(tmp);
+		} else {
+			pte = pte->next;
+		}
+	}
+	return npages;
 }
