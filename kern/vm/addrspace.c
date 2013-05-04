@@ -243,11 +243,11 @@ sys_sbrk(intptr_t amount, int32_t *cur_brk)
 	int free_heap = 0;
 
 	*cur_brk = (int32_t)curthread->t_addrspace->cur_brk;
-	//kprintf("sbrk request amount = %u\n", (uint32_t)amount);	
+	/*kprintf("sbrk request amount = %u\n", (uint32_t)amount);*/
+	
 	if (amount == 0) {
 		return 0;	
 	} else if (amount > 0) {
-		
 		/* Check if the existing allocation can satisfy request */
 		if (curthread->t_addrspace->cur_brk != curthread->t_addrspace->heap_base) {
 			/* at least 1 page has been allocated */
@@ -256,14 +256,9 @@ sys_sbrk(intptr_t amount, int32_t *cur_brk)
 				free_heap = 0;	
 			}
 		}
-
 		if (amount <= free_heap) {
-	//		kprintf("Satisfied in existing heap 0x%x\n", curthread->t_addrspace->cur_brk & PAGE_FRAME);
-	//		if ((curthread->t_addrspace->cur_brk & PAGE_FRAME) == 0x44a000) {
-	//			kprintf("I will panic now\n");
-	//		}
+			/* kprintf("Satisfied in existing heap 0x%x\n", curthread->t_addrspace->cur_brk & PAGE_FRAME); */
 			curthread->t_addrspace->cur_brk += amount;
-	//		kprintf("Setting cur_brk to 0x%x\n", curthread->t_addrspace->cur_brk);
 			return 0;
 		}
 		amount -= free_heap;
@@ -273,12 +268,24 @@ sys_sbrk(intptr_t amount, int32_t *cur_brk)
 			pte = pte->next;
 		}
 		
+		struct pagetable *heap_pte = pte;
 		heap_pg = (curthread->t_addrspace->cur_brk + free_heap) & PAGE_FRAME;
 		for (i = 0; i < npages; i++) {
-	//		kprintf("Allocating new heap page at 0x%x\n", heap_pg);
+			/* kprintf("Allocating new heap page at 0x%x\n", heap_pg); */
 			pte->next = kmalloc(sizeof(struct pagetable));
 			if (pte->next == NULL) {
 				/* Ran out of memory, no swapping implemented */
+				heap_pte = heap_pte->next;
+				if (heap_pte == NULL) {
+					return ENOMEM;
+				}
+				heap_pte->prev->next = NULL;
+				while (heap_pte->next != NULL) {
+					heap_pte = heap_pte->next;
+					kfree(heap_pte->prev);
+				}
+				/* Last node itself */
+				kfree(heap_pte);
 				return ENOMEM;
 			}
 			pte->next->prev = pte;
@@ -290,12 +297,16 @@ sys_sbrk(intptr_t amount, int32_t *cur_brk)
 			heap_pg += PAGE_SIZE;
 		}
 		curthread->t_addrspace->cur_brk += (amount + free_heap);
-	//	kprintf("Setting cur_brk to 0x%x\n", curthread->t_addrspace->cur_brk);
+		/* kprintf("Setting cur_brk to 0x%x\n", curthread->t_addrspace->cur_brk); */
 	} else {
 		/* free page operation */
-		KASSERT(1);
+		//KASSERT(1);
+		if ((curthread->t_addrspace->cur_brk + amount) < curthread->t_addrspace->heap_base) {
+			return EINVAL;
+		}
 		vaddr_t old_brk_page = curthread->t_addrspace->cur_brk & PAGE_FRAME;
 		vaddr_t new_brk_page = (curthread->t_addrspace->cur_brk + amount) & PAGE_FRAME;
+		
 		int ret = free_vpages(new_brk_page + PAGE_SIZE, (old_brk_page - new_brk_page)/PAGE_SIZE);
 		KASSERT(ret == 0);
 	}
