@@ -41,20 +41,10 @@
 #include <mips/vm.h>
 #include <syscall.h>
 
-#define _STACKPAGES    12
+#define STACK_VPAGES    12
 
-/*
-static void as_zero_region(paddr_t paddr, unsigned npages);
-
-static
-void
-as_zero_region(paddr_t paddr, unsigned npages)
-{
-	bzero((void *)PADDR_TO_KVADDR(paddr), npages * PAGE_SIZE);
-}
-*/
-
-int free_vpages(vaddr_t vpage, int npages);
+static int
+free_vpages(vaddr_t vpage, int npages);
 
 struct addrspace *
 as_create(void)
@@ -125,7 +115,8 @@ as_destroy(struct addrspace *as)
 void
 as_activate(struct addrspace *as)
 {
-	(void)as;  // suppress warning until code gets written
+	/* as is not needed for the algorithm implemented */
+	(void)as;
 	int i, spl;
 	spl = splhigh();
 	for (i = 0; i < NUM_TLB; i++) {
@@ -300,7 +291,6 @@ sys_sbrk(intptr_t amount, int32_t *cur_brk)
 		/* kprintf("Setting cur_brk to 0x%x\n", curthread->t_addrspace->cur_brk); */
 	} else {
 		/* free page operation */
-		//KASSERT(1);
 		if ((curthread->t_addrspace->cur_brk + amount) < curthread->t_addrspace->heap_base) {
 			return EINVAL;
 		}

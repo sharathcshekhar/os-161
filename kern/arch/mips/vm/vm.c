@@ -10,34 +10,22 @@
 #include <vm.h>
 #include <mips/vm.h>
 
-#define STACKPAGES    12
 
-static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
-
+static struct spinlock phymem_lock = SPINLOCK_INITIALIZER;
+static struct spinlock tlb_lock = SPINLOCK_INITIALIZER;
 static bool vm_initialized = false;
 struct coremap_t *coremap = NULL;
 static int ppages = 0;
 
 static void coremap_init(paddr_t lo_ram);
-
-static void coremap_init(paddr_t lo_ram)
-{
-	int i;
-	for (i = 0; i < ppages; i++) {
-		coremap[i].ppage = lo_ram;
-		coremap[i].pte = NULL;
-		coremap[i].lru_bit = false;
-		coremap[i].nxt_pg = false;
-		coremap[i].status = false;
-		lo_ram = lo_ram + PAGE_SIZE;
-	}
-}
+static void as_zero_region(paddr_t paddr, unsigned npages);
 
 void
 vm_bootstrap(void)
 {
 	paddr_t lo_ram, hi_ram;
 	int coremap_pages;
+	
 	ram_getsize(&lo_ram, &hi_ram);
 	ppages = (hi_ram - lo_ram)/PAGE_SIZE;
 	coremap = (struct coremap_t *)PADDR_TO_KVADDR(lo_ram);
@@ -48,23 +36,18 @@ vm_bootstrap(void)
 	vm_initialized = true;
 }
 
-void as_zero_region(paddr_t paddr, unsigned npages);
-void as_zero_region(paddr_t paddr, unsigned npages)
-{
-	bzero((void *)PADDR_TO_KVADDR(paddr), npages * PAGE_SIZE);
-}
-
 paddr_t
 getppages(unsigned long npages)
 {
 	paddr_t addr = 0;
 	int i;
+	
 	if (!vm_initialized) {
-		spinlock_acquire(&stealmem_lock);
+		spinlock_acquire(&phymem_lock);
 		addr = ram_stealmem(npages);
-		spinlock_release(&stealmem_lock);
+		spinlock_release(&phymem_lock);
 	} else {
-		spinlock_acquire(&stealmem_lock);
+		spinlock_acquire(&phymem_lock);
 		for (i = 0; i < ppages; i++) {
 			if (coremap[i].status == false) {
 				coremap[i].status = true;
@@ -73,7 +56,7 @@ getppages(unsigned long npages)
 			}
 		}
 		as_zero_region(addr, 1);
-		spinlock_release(&stealmem_lock);
+		spinlock_release(&phymem_lock);
 	}
 	KASSERT(addr != 0);
 	return addr;
@@ -84,6 +67,7 @@ vaddr_t
 alloc_kpages(int npages)
 {
 	paddr_t pa;
+	
 	pa = getppages(npages);
 	if (pa == 0) {
 		return 0;
@@ -95,10 +79,11 @@ void
 free_kpages(vaddr_t addr)
 {
 	int i;
+	
 	if (!vm_initialized) {
 		return;
 	}
-	spinlock_acquire(&stealmem_lock);
+	spinlock_acquire(&phymem_lock);
 	for (i = 0; i < ppages; i++) {
 		vaddr_t va = PADDR_TO_KVADDR(coremap[i].ppage);
 		if (va == addr) {
@@ -106,21 +91,22 @@ free_kpages(vaddr_t addr)
 			break;
 		}
 	}
-	spinlock_release(&stealmem_lock);
+	spinlock_release(&phymem_lock);
 }
 
 void 
 free_coremap(paddr_t addr)
 {
 	int i;
-	spinlock_acquire(&stealmem_lock);
+	
+	spinlock_acquire(&phymem_lock);
 	for (i = 0; i < ppages; i++) {
 		if (coremap[i].ppage == addr) {
 			coremap[i].status = false;
 			break;
 		}
 	}
-	spinlock_release(&stealmem_lock);
+	spinlock_release(&phymem_lock);
 }
 void
 vm_tlbshootdown_all(void)
@@ -212,9 +198,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	KASSERT((paddr & PAGE_FRAME) == paddr);
 
 	/* Disable interrupts on this CPU while frobbing the TLB. */
-	spl = splhigh();
-
-	spinlock_acquire(&stealmem_lock);
+	spinlock_acquire(&tlb_lock);
 	for (i = 0; i < NUM_TLB; i++) {
 		tlb_read(&ehi, &elo, i);
 		if (elo & TLBLO_VALID) {
@@ -224,8 +208,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		elo = paddr | TLBLO_DIRTY | TLBLO_VALID;
 		DEBUG(DB_VM, "vm: 0x%x -> 0x%x\n", faultaddress, paddr);
 		tlb_write(ehi, elo, i);
-		spinlock_release(&stealmem_lock);
-		splx(spl);
+		spinlock_release(&tlb_lock);
 		return 0;
 	}
 	KASSERT(1);
@@ -237,8 +220,26 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	tlb_write(ehi, elo, tlb_entry);
 	
 	DEBUG(DB_VM, "Ran out of TLB entries - doing random TLB replacement\n");
-	spinlock_release(&stealmem_lock);
-	splx(spl);
-	
+	spinlock_release(&tlb_lock);
 	return 0;
+}
+
+static void
+coremap_init(paddr_t lo_ram)
+{
+	int i;
+	for (i = 0; i < ppages; i++) {
+		coremap[i].ppage = lo_ram;
+		coremap[i].pte = NULL;
+		coremap[i].lru_bit = false;
+		coremap[i].nxt_pg = false;
+		coremap[i].status = false;
+		lo_ram = lo_ram + PAGE_SIZE;
+	}
+}
+
+static void
+as_zero_region(paddr_t paddr, unsigned npages)
+{
+	bzero((void *)PADDR_TO_KVADDR(paddr), npages * PAGE_SIZE);
 }
