@@ -100,7 +100,7 @@ boot(void)
 	kprintf("%s", harvard_copyright);
 	kprintf("\n");
 
-	kprintf("Project by: sc296@buffalo.edu and adityaki@buffalo.edu \n system version %s (%s #%d)\n", 
+	kprintf("Project by: Sharath Chandrashrekhara <sc296@buffalo.edu> \n system version %s (%s #%d)\n", 
 		GROUP_VERSION, buildconfig, buildversion);
 	kprintf("\n");
 

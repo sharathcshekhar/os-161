@@ -1,3 +1,10 @@
+/*
+ * file.c
+ *
+ *  Created on: Apr 8, 2013
+ *      Author: Sharath Chandrashekhara <sc296@buffalo.edu>
+ */
+
 #include <kern/seek.h>
 #include <kern/errno.h>
 #include <file.h>

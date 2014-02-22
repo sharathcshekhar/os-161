@@ -2,7 +2,7 @@
  * file_io.c
  *
  *  Created on: Apr 1, 2013
- *      Author: trinity
+ *      Author: Sharath Chandrashekhara <sc296@buffalo.edu>
  */
 
 #include <kern/errno.h>
